@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { postApi, putApi, getApi } from "@/lib/apiClient";
+import { Mail } from "lucide-react";
 
 type FormState = {
   job_title: string;
@@ -27,6 +28,9 @@ export default function SetupProfilePage() {
   const [setupToken, setSetupToken] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [initialEmailHint, setInitialEmailHint] = useState<string>("");
+
+  // <-- new: user name coming from verify-email response
+  const [userName, setUserName] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string>("");
@@ -64,9 +68,17 @@ export default function SetupProfilePage() {
       try {
         if (!tokenFromUrl) throw new Error("Missing token");
         const data: any = await postApi("/auth/verify-email", { token: tokenFromUrl });
+
         const tokenForSetup = data?.setup_token || tokenFromUrl;
         setSetupToken(tokenForSetup);
+
+        // server may return an email hint
         setInitialEmailHint(data?.email || "");
+
+        // server may return a user name (try common keys)
+        const maybeName = data?.name || data?.full_name || data?.username || "";
+        setUserName(maybeName || "");
+
       } catch (e: any) {
         console.error("verify-email error", e);
         setErr(e?.payload?.message || e?.message || "Invalid or expired link");
@@ -77,6 +89,17 @@ export default function SetupProfilePage() {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenFromUrl]);
+
+  // If initialEmailHint is present, set email and run checkMember automatically
+  useEffect(() => {
+    if (!initialEmailHint) return;
+    setEmail(initialEmailHint);
+    // run check for the hinted email (non-blocking)
+    checkMember(initialEmailHint).catch((e) => {
+      // ignore errors here; checkMember already sets state on errors
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEmailHint]);
 
   // NEW: ask backend if this token/user may use the setup form
   useEffect(() => {
@@ -128,6 +151,8 @@ export default function SetupProfilePage() {
   };
 
   const onEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // only allow editing when userName is not present
+    if (userName) return;
     const v = (e.target.value || "").trim();
     setEmail(v);
     setMemberOk(null);
@@ -189,7 +214,6 @@ export default function SetupProfilePage() {
     placeholder?: string;
     minChars?: number;
   }> = ({ value, onChange, placeholder, minChars = 1 }) => {
-    // local tags array derived from parent's csv
     const parseCsv = (csv: string) =>
       (csv || "")
         .split(",")
@@ -202,17 +226,14 @@ export default function SetupProfilePage() {
     const [open, setOpen] = useState(false);
     const [loadingLocal, setLoadingLocal] = useState(false);
 
-    // keep internal tags in sync if parent value changes externally
     useEffect(() => {
       const parsed = parseCsv(value);
-      // only update if different
       if (parsed.length !== tags.length || parsed.some((t, i) => tags[i] !== t)) {
         setTags(parsed);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value]);
 
-    // Debounced query fetch with AbortController. Depends only on query/SITES_API/minChars
     useEffect(() => {
       if (!query || query.length < minChars) {
         setSuggestions([]);
@@ -260,7 +281,6 @@ export default function SetupProfilePage() {
           }
 
           if (mounted) {
-            // filter out already selected tags
             const filtered = list.map((x) => x.trim()).filter(Boolean).filter((x) => !tags.includes(x));
             setSuggestions(filtered);
             setOpen(true);
@@ -284,7 +304,6 @@ export default function SetupProfilePage() {
       };
     }, [query, SITES_API, minChars, tags]);
 
-    // helper to finalize tags -> notify parent
     const commitTags = (nextTags: string[]) => {
       setTags(nextTags);
       onChange(nextTags.join(", "));
@@ -293,7 +312,6 @@ export default function SetupProfilePage() {
     const addTag = (raw: string) => {
       const t = (raw || "").trim();
       if (!t) return;
-      // prevent duplicates
       if (tags.includes(t)) {
         setQuery("");
         setSuggestions([]);
@@ -312,7 +330,6 @@ export default function SetupProfilePage() {
       commitTags(next);
     };
 
-    // keyboard handling: Enter or comma adds tag, Backspace when empty removes last
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -325,20 +342,17 @@ export default function SetupProfilePage() {
         return;
       }
       if (e.key === "Backspace" && query === "") {
-        // remove last tag
         if (tags.length > 0) {
           removeTagAt(tags.length - 1);
         }
       }
       if (e.key === "ArrowDown" && suggestions.length > 0) {
         e.preventDefault();
-        // focus first suggestion via DOM (simple UX improvement)
         const first = document.querySelector<HTMLLIElement>(".sites-suggestion-list li");
         first?.focus();
       }
     };
 
-    // click suggestion
     const selectSuggestion = (s: string) => {
       addTag(s);
     };
@@ -373,7 +387,6 @@ export default function SetupProfilePage() {
           />
         </div>
 
-        {/* suggestion dropdown */}
         {open && (suggestions.length > 0 || loadingLocal) && (
           <ul
             className="absolute sites-suggestion-list z-50 mt-1 w-full bg-white border rounded shadow max-h-48 overflow-auto"
@@ -430,7 +443,6 @@ export default function SetupProfilePage() {
           .filter(Boolean),
       };
 
-      //await postApi("/auth/setup-profile", payload);
       await putApi("/auth/setup-profile", payload);
 
       try {
@@ -475,23 +487,6 @@ export default function SetupProfilePage() {
           >
             Go to login
           </button>
-
-          {/* <button
-            type="button"
-            onClick={async () => {
-              try {
-                await postApi("/auth/resend-verification", { email: initialEmailHint || email });
-                setToastMessage("Verification email resent.");
-                setShowToast(true);
-              } catch {
-                setToastMessage("Could not resend verification.");
-                setShowToast(true);
-              }
-            }}
-            className="px-4 py-2 border rounded"
-          >
-            Resend verification
-          </button> */}
         </div>
       </div>
     );
@@ -509,9 +504,11 @@ export default function SetupProfilePage() {
     );
   }
 
+  const isErrorState = memberOk === false;
+
   return (
-    <div className="mx-auto w-full max-w-lg rounded-2xl bg-white p-8 shadow">
-      {/* Toast */}
+    <div className="min-h-screen flex items-center justify-center bg-muted px-6">
+      {/* toast */}
       {showToast && (
         <div className="fixed inset-x-0 top-6 flex items-center justify-center pointer-events-none z-50">
           <div className="pointer-events-auto bg-white border border-amber-200 shadow p-3 rounded-md text-sm">
@@ -521,91 +518,121 @@ export default function SetupProfilePage() {
         </div>
       )}
 
-      <h1 className="mb-6 text-center text-2xl font-semibold">Let's Setup Your Account</h1>
-
-      {initialEmailHint ? (
-        <p className="mb-4 text-sm text-gray-600">
-          We sent a verification link to <span className="font-medium">{initialEmailHint}</span>. Please type the same email
-          below to continue.
-        </p>
-      ) : null}
-
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <Label htmlFor="email">Email*</Label>
-          <Input id="email" name="email" placeholder="you@amazon.com" value={email} onChange={onEmailChange} />
+      {/* card: two-column */}
+      <div className="w-full max-w-5xl grid md:grid-cols-2 bg-white rounded-2xl shadow-lg overflow-hidden md:divide-x md:divide-gray-100">
+        {/* left intro panel (visual) */}
+        <div className="hidden md:flex flex-col items-start justify-start gap-6 px-12 py-10 sm:py-12 bg-gradient-to-br from-gray-100 via-gray-50 to-white">
+          <div className="w-16 h-16 rounded-full bg-white/90 border flex items-center justify-center shadow-sm">
+            <Mail className="w-6 h-6 text-gray-700" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">Let's Setup Your Account</h2>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Enter the Amazon email address associated with your account and complete your profile. We'll confirm the account and save your profile details.
+            </p>
+          </div>
         </div>
 
-        <div className="text-xs">
-          {checking ? (
-            <span className="text-gray-500">Checking email…</span>
-          ) : memberOk === true ? (
-            <span className="text-emerald-600">✔ {memberMsg}</span>
-          ) : memberOk === false ? (
-            <span className="text-rose-600">✖ {memberMsg}</span>
+        {/* right form panel */}
+        <div className="px-6 py-10 sm:px-10 sm:py-12">
+          {initialEmailHint ? (
+            <p className="mb-4 text-sm text-gray-600 text-center md:text-left">
+              We sent a verification link to <span className="font-medium">{initialEmailHint}</span>.
+            </p>
           ) : (
-            <span className="text-gray-500">Type your email to validate and enable the form.</span>
+            <h3 className="mb-4 text-lg font-medium text-gray-800">Complete your profile</h3>
           )}
-        </div>
 
-        <div>
-          <Label htmlFor="job_title">Job Title*</Label>
-          <Input id="job_title" name="job_title" value={form.job_title} onChange={onChange} disabled={inputsDisabled} />
-        </div>
+          <form onSubmit={submit} className="space-y-4 max-w-xl">
+            <div>
+              {/* show user name in place of Amazon Email Address and disable field when name exists */}
+              <Label htmlFor="email">{userName ? "User" : "Amazon Email Address*"}</Label>
+              <Input
+                id="email"
+                name="email"
+                placeholder={userName ? undefined : "you@amazon.com"}
+                value={userName ? userName : email}
+                onChange={onEmailChange}
+                disabled={!!userName} // disabled when userName exists
+                aria-label={userName ? `User: ${userName}` : "Amazon Email Address"}
+              />
+              <div className="text-xs mt-2">
+                {checking ? (
+                  <span className="text-gray-500">Checking email…</span>
+                ) : memberOk === true ? (
+                  <span className="text-emerald-600">✔ {memberMsg}</span>
+                ) : memberOk === false ? (
+                  <span className="text-rose-600">✖ {memberMsg}</span>
+                ) : (
+                  <span className="text-gray-500">Type your email to validate and enable the form.</span>
+                )}
+              </div>
+            </div>
 
-        <div>
-          <Label htmlFor="amazon_site">Amazon Site*</Label>
-          <SitesTagAutocomplete
-            value={form.amazon_site}
-            onChange={(csv) => setForm((f) => ({ ...f, amazon_site: csv }))}
-            placeholder="Type and select or press Enter / comma to add"
-            minChars={1}
-          />
-          <p className="text-xs text-muted-foreground mt-1">You can add multiple sites. Press Enter or comma to add.</p>
-        </div>
+            <div>
+              <Label htmlFor="job_title">Job Title*</Label>
+              <Input id="job_title" name="job_title" value={form.job_title} onChange={onChange} disabled={inputsDisabled} />
+            </div>
 
-        <div>
-          <Label htmlFor="other_accounts">Other Accounts</Label>
-          <Input id="other_accounts" name="other_accounts" value={form.other_accounts} onChange={onChange} disabled={inputsDisabled} />
-          <p className="text-xs text-muted-foreground mt-1">e.g. Amazon XY21, Amazon XY22</p>
-        </div>
+            <div>
+              <Label htmlFor="amazon_site">Amazon Site*</Label>
+              <SitesTagAutocomplete
+                value={form.amazon_site}
+                onChange={(csv) => setForm((f) => ({ ...f, amazon_site: csv }))}
+                placeholder="Type and select or press Enter / comma to add"
+                minChars={1}
+              />
+              <p className="text-xs text-muted-foreground mt-1">You can add multiple sites. Press Enter or comma to add.</p>
+            </div>
 
-        <div>
-          <Button type="submit" disabled={saving || inputsDisabled} className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-10 rounded-md px-8 w-full">
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
+            <div>
+              <Label htmlFor="other_accounts">Other Accounts</Label>
+              <Input id="other_accounts" name="other_accounts" value={form.other_accounts} onChange={onChange} disabled={inputsDisabled} />
+              <p className="text-xs text-muted-foreground mt-1">e.g. Amazon XY21, Amazon XY22</p>
+            </div>
 
-        {memberOk === false && (
-          <div className="pt-2 text-xs text-gray-600">
-            {memberMsg}
-            {memberMsg && memberMsg.toLowerCase().includes("expired") && (
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await postApi("/auth/resend-verification", { email });
-                      setMemberMsg("A new verification link was sent if the email exists.");
-                      setToastMessage("Verification email resent.");
-                      setShowToast(true);
-                    } catch {
-                      setMemberMsg("Could not resend verification link.");
-                      setToastMessage("Could not resend verification link.");
-                      setShowToast(true);
-                    }
-                  }}
-                  className="underline text-indigo-600"
-                >
-                  Resend verification email
-                </button>
+            <div className="pt-2">
+              <Button
+                type="submit"
+                disabled={saving || inputsDisabled}
+                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-10 rounded-md px-8"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+
+            {memberOk === false && (
+              <div className="pt-2 text-xs text-gray-600">
+                {memberMsg}
+                {memberMsg && memberMsg.toLowerCase().includes("expired") && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await postApi("/auth/resend-verification", { email });
+                          setMemberMsg("A new verification link was sent if the email exists.");
+                          setToastMessage("Verification email resent.");
+                          setShowToast(true);
+                        } catch {
+                          setMemberMsg("Could not resend verification link.");
+                          setToastMessage("Could not resend verification link.");
+                          setShowToast(true);
+                        }
+                      }}
+                      className="underline text-indigo-600"
+                    >
+                      Resend verification email
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {err && <div className="text-sm text-red-600">{err}</div>}
-      </form>
+            {err && <div className="text-sm text-red-600">{err}</div>}
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
