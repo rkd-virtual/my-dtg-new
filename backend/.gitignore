@@ -1,0 +1,55 @@
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Logs and debug
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Django / Flask specific
+migrations/__pycache__/
+instance/
+*.db
+*.sqlite3
+*.pyproj
+
+# VS Code and IDE settings
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+.coverage
+htmlcov/
+.tox/
+.nox/
+pytest_cache/
+.cache/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Temporary files
+*.bak
+*.swp
+*.swo
