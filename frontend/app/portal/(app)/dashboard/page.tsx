@@ -1,8 +1,7 @@
-// app/portal/(app)/dashboard/page.tsx
+// frontend/app/portal/(app)/dashboard/page.tsx
 "use client";
 
 import { SiteHeader } from "@/components/site-header";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,89 +9,206 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { CheckCircleIcon, LoaderIcon, EditIcon, DownloadIcon, MoreVerticalIcon } from "lucide-react";
-import { useState } from "react";
-
-interface LineItem {
-  partNumber: string;
-  name: string;
-  quantity: number;
-  price: string;
-}
-
-interface ActivityItem {
-  id: string;
-  type: "order" | "quote";
-  date: string;
-  status: string;
-  items: LineItem[];
-  total: number;
-  account?: string;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const isDone = status === "Delivered" || status === "Approved" || status === "Shipped";
-  const isInProcess = status === "Processing" || status === "Pending";
-
-  return (
-    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background">
-      {isDone && <CheckCircleIcon className="h-4 w-4 text-green-600" />}
-      {isInProcess && <LoaderIcon className="h-4 w-4 text-muted-foreground" />}
-      <span className={isDone ? "text-green-600" : "text-muted-foreground"}>{status}</span>
-    </div>
-  );
-}
-
-/* This was for demo item list */
-const allItems: ActivityItem[] = [];
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/contexts/auth-context";
+import { Item, ItemMedia, ItemContent, ItemTitle } from "@/components/ui/item";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function Page() {
-  const [filter, setFilter] = useState<string>("all");
-  const [selectedAccount, setSelectedAccount] = useState<string>("all-accounts");
+  const { sites, loading } = useAuth();
 
-  const filteredItems = allItems.filter((item) => {
-    const typeMatch = filter === "all" ? true : item.type === filter;
-    const accountMatch = selectedAccount === "all-accounts" ? true : item.account === selectedAccount;
-    return typeMatch && accountMatch;
-  });
+  // real state may be null until we decide a value
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [ordersCount, setOrdersCount] = useState<number | null>(null);
+  const [quotesCount, setQuotesCount] = useState<number | null>(null);
+  const [loadingCounts, setLoadingCounts] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // decide initial selection once sites are available (or if a session value exists)
+  useEffect(() => {
+    // do nothing while auth/sites are still loading
+    if (loading) return;
+
+    // if already set (user navigated and state preserved), don't overwrite
+    if (selectedAccount !== null) return;
+
+    try {
+      const saved = sessionStorage.getItem("selectedAccount");
+      if (saved) {
+        setSelectedAccount(saved);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (sites && sites.length > 0) {
+      const def = sites.find((s) => s.is_default) || sites[0];
+      if (def && def.site_slug) {
+        setSelectedAccount(def.site_slug);
+        return;
+      }
+    }
+
+    // final fallback
+    setSelectedAccount("all-accounts");
+  }, [loading, sites, selectedAccount]);
+
+  // persist selection whenever user changes it (but guard null)
+  useEffect(() => {
+    if (selectedAccount === null) return;
+    try {
+      sessionStorage.setItem("selectedAccount", selectedAccount);
+    } catch {}
+  }, [selectedAccount]);
+
+  // derive the actual value to pass into <select>
+  // this avoids timing mismatch if selectedAccount is null while sites load
+  const selectValue = useMemo(() => {
+    if (selectedAccount) return selectedAccount;
+    // still undecided: if sites exist, prefer default/first for display, else fallback
+    if (!loading && sites && sites.length > 0) {
+      const def = sites.find((s) => s.is_default) || sites[0];
+      return def?.site_slug ?? "all-accounts";
+    }
+    return "all-accounts";
+  }, [selectedAccount, sites, loading]);
+
+  // fetch counts when we have a concrete site to call (resolve siteToUse from selectedAccount or default)
+  useEffect(() => {
+    // resolve concrete site slug to use for API call
+    let siteToUse: string | null = null;
+
+    // prefer explicit user selection if set
+    if (selectedAccount && selectedAccount !== "all-accounts") siteToUse = selectedAccount;
+    else if (selectedAccount === "all-accounts") {
+      // if user intentionally set to all-accounts but sites exist, use default site for counts
+      if (sites && sites.length > 0) {
+        const def = sites.find((s) => s.is_default) || sites[0];
+        siteToUse = def?.site_slug ?? null;
+      } else {
+        siteToUse = null;
+      }
+    } else {
+      // selectedAccount is null (undecided): derive from sites if available
+      if (sites && sites.length > 0) {
+        const def = sites.find((s) => s.is_default) || sites[0];
+        siteToUse = def?.site_slug ?? null;
+      } else {
+        siteToUse = null;
+      }
+    }
+
+    if (!siteToUse) {
+      setOrdersCount(null);
+      setQuotesCount(null);
+      setFetchError(null);
+      return;
+    }
+
+    let aborted = false;
+    async function fetchCountsForSite(siteSlugRaw: string) {
+      setLoadingCounts(true);
+      setFetchError(null);
+
+      try {
+        const siteSlug = String(siteSlugRaw || "").trim();
+        if (!siteSlug) throw new Error("Invalid site code");
+
+        const normalized = siteSlug.toUpperCase();
+        const url = `https://dtg-backend.onrender.com/api/dashboard?site_code=${encodeURIComponent(normalized)}`;
+
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `Dashboard fetch failed (${res.status})`);
+        }
+
+        const json = await res.json().catch(() => ({}));
+        if (aborted) return;
+
+        const part1 = json?.part1 ?? {};
+        const orderVal = typeof part1.order === "number" ? part1.order : part1.order ? Number(part1.order) : null;
+        const quotesVal = typeof part1.quotes === "number" ? part1.quotes : part1.quotes ? Number(part1.quotes) : null;
+
+        setOrdersCount(Number.isFinite(orderVal) ? orderVal : null);
+        setQuotesCount(Number.isFinite(quotesVal) ? quotesVal : null);
+      } catch (err: any) {
+        if (aborted) return;
+        console.error("Failed to fetch dashboard:", err);
+        setFetchError(err?.message || "Failed to fetch dashboard");
+        setOrdersCount(null);
+        setQuotesCount(null);
+      } finally {
+        if (!aborted) setLoadingCounts(false);
+      }
+    }
+
+    fetchCountsForSite(siteToUse);
+
+    return () => {
+      aborted = true;
+    };
+  }, [selectedAccount, sites, loading]);
+
+  const showSelect = !!sites && sites.length > 1;
 
   return (
     <>
       <SiteHeader title="Dashboard" />
       <div className="p-4 lg:p-6">
-        {/* Row 1: Select card (compact width) */}
-        <div className="mb-6 flex justify-start">
-          <Card className="w-full sm:w-[400px] md:w-[320px] lg:w-[300px]">
-            <CardContent className="p-4">
-              <label htmlFor="account-select" className="text-sm font-semibold mb-2 block">
-                Select an Account
-              </label>
-              <select
-                id="account-select"
-                value={selectedAccount}
-                onChange={(e) => setSelectedAccount(e.target.value)}
-                className="rounded-md border px-3 py-2 text-sm shadow-sm w-full"
-              >
-                <option value="all-accounts">All Accounts</option>
-                <option value="amazon-ctz">Amazon CTZ</option>
-                <option value="amazon-ryt">Amazon RYT</option>
-                <option value="dev-account">DEV Account</option>
-              </select>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Show spinner loader while pulling data */}
+        {loadingCounts && (
+          <div className="flex justify-start mb-6">
+            <div className="w-full sm:w-[400px] md:w-[320px] lg:w-[300px]">
+              <Item variant="muted">
+                <ItemMedia>
+                  <Spinner />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle className="line-clamp-1">Loading dashboard data…</ItemTitle>
+                </ItemContent>
+              </Item>
+            </div>
+          </div>
+        )}
+        {/* Select card - hidden when user has <= 1 site */}
+        {showSelect && (
+          <div className="mb-6 flex justify-start">
+            <Card className="w-full sm:w-[400px] md:w-[320px] lg:w-[300px]">
+              <CardContent className="p-4">
+                <label htmlFor="account-select" className="text-sm font-semibold mb-2 block">
+                  Select an Account
+                </label>
 
-        {/* Row 2: Orders / Quotes */}
+                <select
+                  id="account-select"
+                  // use the derived value to avoid mismatch
+                  value={selectValue}
+                  onChange={(e) => {
+                    // update real state (string)
+                    setSelectedAccount(e.target.value);
+                  }}
+                  className="rounded-md border px-3 py-2 text-sm shadow-sm w-full"
+                >
+                  <option value="all-accounts">All Accounts</option>
+                  {!loading && sites && sites.length > 0
+                    ? sites.map((s) => (
+                        <option key={s.id} value={s.site_slug}>
+                          {s.label}
+                        </option>
+                      ))
+                    : null}
+                </select>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Card>
             <CardHeader>
@@ -100,8 +216,8 @@ export default function Page() {
               <CardDescription>Quick stats</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">47</div>
-              {/* <div className="text-sm text-muted-foreground mt-1">5 new orders this month</div> */}
+              <div className="text-2xl font-semibold">{loadingCounts ? "…" : ordersCount !== null ? ordersCount : "—"}</div>
+              {fetchError && <div className="text-sm text-red-600 mt-2">{fetchError}</div>}
             </CardContent>
           </Card>
 
@@ -111,87 +227,10 @@ export default function Page() {
               <CardDescription>Quick stats</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">12</div>
-              {/* <div className="text-sm text-muted-foreground mt-1">2 new quotes this month</div> */}
+              <div className="text-2xl font-semibold">{loadingCounts ? "…" : quotesCount !== null ? quotesCount : "—"}</div>
             </CardContent>
           </Card>
         </div>
-
-        {/* Row 3: Recent Activity table */}
-        {/* <div>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between w-full">
-                <div>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Your recent orders and quotes</CardDescription>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  
-
-                  <ToggleGroup
-                    type="single"
-                    value={filter}
-                    onValueChange={(value) => setFilter(value || "all")}
-                    className="justify-start"
-                  >
-                    <ToggleGroupItem value="all" aria-label="Show all">All</ToggleGroupItem>
-                    <ToggleGroupItem value="order" aria-label="Show orders">Orders</ToggleGroupItem>
-                    <ToggleGroupItem value="quote" aria-label="Show quotes">Quotes</ToggleGroupItem>
-                  </ToggleGroup>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[120px]">Order ID</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead className="w-[80px] text-center">Qty.</TableHead>
-                    <TableHead className="w-[120px] text-right">Total</TableHead>
-                    <TableHead className="w-[160px]">Status</TableHead>
-                    <TableHead className="w-[80px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item) => {
-                    const totalQty = item.items.reduce((sum, lineItem) => sum + lineItem.quantity, 0);
-                    const itemsSummary = item.items.length === 1 ? item.items[0].name : `${item.items[0].name} + ${item.items.length - 1} more`;
-
-                    return (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium font-mono text-sm">{item.id}</TableCell>
-                        <TableCell className="max-w-[300px] truncate">{itemsSummary}</TableCell>
-                        <TableCell className="text-center">{totalQty}</TableCell>
-                        <TableCell className="text-right font-semibold">${item.total.toFixed(2)}</TableCell>
-                        <TableCell><StatusBadge status={item.status} /></TableCell>
-                        <TableCell>
-                          {item.type === "quote" && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MoreVerticalIcon className="h-4 w-4" />
-                                  <span className="sr-only">Open menu</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem><EditIcon className="h-4 w-4 mr-2" />Edit Quote</DropdownMenuItem>
-                                <DropdownMenuItem><DownloadIcon className="h-4 w-4 mr-2" />Download PDF</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div> */}
       </div>
     </>
   );

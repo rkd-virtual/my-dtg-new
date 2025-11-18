@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useAuth } from "@/contexts/auth-context";
+import { Item, ItemMedia, ItemContent, ItemTitle } from "@/components/ui/item";
+import { Spinner } from "@/components/ui/spinner";
 
 const baseNav = [
   { title: "Dashboard", url: "/portal/dashboard", icon: LayoutDashboardIcon },
@@ -39,7 +41,7 @@ const secondaryNav = [{ title: "Settings", url: "/portal/settings", icon: Settin
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, sites, signOut } = useAuth();
 
   const [openProfile, setOpenProfile] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
@@ -48,7 +50,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [popoverStyle, setPopoverStyle] = React.useState<{ top: number; left: number } | null>(null);
   const [triangleTop, setTriangleTop] = React.useState<number | null>(null);
 
-  // Outside click: allow clicks inside profileRef or popoverRef
+  // Outside click handler (unchanged)
   React.useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node | null;
@@ -61,7 +63,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return () => document.removeEventListener("click", onDocClick);
   }, [openProfile]);
 
-  // Positioning: prefer to the right of the profile pill, vertically center popover.
+  // position popover (unchanged)
   React.useEffect(() => {
     if (!openProfile) {
       setPopoverStyle(null);
@@ -77,7 +79,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Horizontal: prefer right of pill, fallback to left or clamp
     let left = rect.right + gap;
     if (left + popWidth + 8 > vw) {
       const leftPos = rect.left - popWidth - gap;
@@ -85,11 +86,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       else left = Math.min(Math.max(rect.right - popWidth, 8), vw - popWidth - 8);
     }
 
-    // Temporary top (will correct after measuring popover)
     const tempTop = Math.min(Math.max(rect.top, 8), Math.max(8, vh - 120 - 8));
     setPopoverStyle({ top: Math.round(tempTop), left: Math.round(left) });
 
-    // Measure and correct
     requestAnimationFrame(() => {
       const pop = popoverRef.current;
       if (!pop) return;
@@ -105,26 +104,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     });
   }, [openProfile]);
 
-  // fallback user info
+  // display fallback user info
   const name =
     (user?.first_name || user?.last_name)
       ? `${user?.first_name ?? ""}${user?.first_name && user?.last_name ? " " : ""}${user?.last_name ?? ""}`.trim()
       : user?.name || "John Doe";
   const email = user?.email || "johndoe@example.com";
 
+  // determine default site label (if available)
+  const defaultSiteLabel = React.useMemo(() => {
+    if (!sites || sites.length === 0) return null;
+    const def = sites.find((s) => s.is_default) || sites[0];
+    return def?.label ?? null;
+  }, [sites]);
+
   // logout handler: show overlay until signOut completes
   async function handleLogout() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      // await the signOut implementation — must return a Promise
       await signOut();
-      // signOut may redirect; overlay remains until navigation happens
     } catch (err) {
-      // optional: you can show toast/error here
       console.error("signOut failed", err);
     } finally {
-      // if signOut doesn't redirect, remove overlay
       setIsLoggingOut(false);
       setOpenProfile(false);
     }
@@ -132,14 +134,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <>
-      {/* Overlay shown during logout */}
-      {isLoggingOut && (
-        <div
-          aria-hidden={!isLoggingOut}
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-        >
+      {/* {isLoggingOut && (
+        <div aria-hidden={!isLoggingOut} className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 bg-white/90 px-6 py-4 rounded-md shadow-lg">
-            {/* spinner */}
             <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden>
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
@@ -147,7 +144,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <div className="text-sm font-medium text-gray-900">Signing out…</div>
           </div>
         </div>
-      )}
+      )} */}
+
+      {isLoggingOut && (
+  <div
+    aria-hidden={!isLoggingOut}
+    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+  >
+    <div className="rounded-md bg-background/95 shadow-lg px-6 py-4 flex items-center gap-4 min-w-[200px]">
+      {/* optional small logo on left — uncomment if you want */}
+      <img src="/DTG_Logo copy.svg" alt="DTG" className="w-8 h-8 object-contain" />
+
+      {/* spinner + content */}
+      <Item variant="muted" className="bg-transparent border-transparent p-0">
+        <ItemMedia>
+          <Spinner size={20} className="text-primary" />
+        </ItemMedia>
+        <ItemContent className="pr-0">
+          <ItemTitle className="text-sm font-medium">Signing out…</ItemTitle>
+          <div className="text-xs text-muted-foreground">Please wait</div>
+        </ItemContent>
+      </Item>
+    </div>
+  </div>
+)}
 
       <Sidebar collapsible="offcanvas" {...props}>
         <SidebarHeader>
@@ -168,7 +188,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarContent>
 
         <SidebarFooter>
-          {/* anchor the whole pill so popover aligns with label */}
           <div className="w-full p-3" ref={profileRef} data-profile-area>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-700 font-semibold text-lg select-none">
@@ -178,6 +197,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="flex-1 min-w-0 bg-transparent">
                 <div className="text-sm font-medium truncate">{loading ? "Loading..." : name}</div>
                 <div className="text-xs text-gray-500 truncate">{loading ? "" : email}</div>
+                {defaultSiteLabel && <div className="text-xs text-muted-foreground truncate mt-0.5">{defaultSiteLabel}</div>}
               </div>
 
               <div className="relative">
@@ -194,7 +214,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </svg>
                 </button>
 
-                {/* Popover: fixed so it won't be clipped; triangle rendered as SVG */}
                 {openProfile && popoverStyle && (
                   <div
                     ref={popoverRef}
@@ -210,7 +229,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       paddingLeft: 0,
                     }}
                   >
-                    {/* triangle */}
                     {triangleTop !== null && (
                       <div
                         aria-hidden
@@ -238,7 +256,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
                     <div className="px-3 py-2">
                       <div className="text-sm font-semibold text-gray-800">{name}</div>
-                      <div className="text-xs text-gray-500 truncate">{email}</div>
+                      <div className="text-xs text-gray-500 truncate">{email}</div>                      
                     </div>
 
                     <div className="border-t" />
