@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { Item, ItemMedia, ItemContent, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
+import Image from "next/image";
 
 const baseNav = [
   { title: "Dashboard", url: "/portal/dashboard", icon: LayoutDashboardIcon },
@@ -153,8 +154,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   >
     <div className="rounded-md bg-background/95 shadow-lg px-6 py-4 flex items-center gap-4 min-w-[200px]">
       {/* optional small logo on left — uncomment if you want */}
-      <img src="/DTG_Logo copy.svg" alt="DTG" className="w-8 h-8 object-contain" />
-
+      {/* <img src="/DTG_Logo copy.svg" alt="DTG" className="w-8 h-8 object-contain" /> */}
+        <Image src="/DTG_Logo.svg" alt="DTG" className="object-contain" width={35} height={35} />
       {/* spinner + content */}
       <Item variant="muted" className="bg-transparent border-transparent p-0">
         <ItemMedia>
@@ -175,7 +176,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
                 <Link href="/portal/dashboard" className="flex items-center">
-                  <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className="flex-shrink-0" />
+                  {/* <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className="flex-shrink-0" /> */}
+                  <Image src="/DTG_Logo.svg" alt="DTG" className="flex-shrink-0" width={48} height={48} />
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

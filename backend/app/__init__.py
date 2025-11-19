@@ -10,6 +10,7 @@ from .config import Config
 from .extensions import db, migrate, jwt, cors
 from .routes.auth import auth_bp,profile_bp
 from .routes.settings import settings_bp
+from .routes.user_sites import bp as user_sites_bp
 
 def create_app():
     """
@@ -64,6 +65,9 @@ def create_app():
 
     # User profile routes
     app.register_blueprint(profile_bp, url_prefix="/api")
+    
+    # User sites routes (GET /api/user/sites)
+    app.register_blueprint(user_sites_bp, url_prefix="/api/user")
 
     # -----------------------------------------------------------
     # Root route for quick health check / info

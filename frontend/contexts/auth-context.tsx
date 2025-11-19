@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getApi, postApi } from "@/lib/apiClient";
 import { Item, ItemMedia, ItemContent, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
+import Image from "next/image";
 
 type UserShape = {
   id?: number;
@@ -128,12 +129,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           />
 
           {/* make logo perfectly centered with a small visual offset */}
-          <img
-            src="/DTG_Logo copy.svg"
+          <Image
+            src="/DTG_Logo.svg"
             alt="DTG"
+            width={80}
+            height={80}
             className="relative z-10 w-20 h-20 object-contain animate-pulse"
             style={{
-              transform: "translateX(2px) translateY(4px)" 
+              transform: "translateX(2px) translateY(15px)"
             }}
           />
         </div>

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { postApi, putApi, getApi } from "@/lib/apiClient";
 import { Mail } from "lucide-react";
 import styles from "./styles.module.css"; 
+import Image from "next/image";
 
 type FormState = {
   job_title: string;
@@ -524,7 +525,8 @@ export default function SetupProfilePage() {
         {/* left intro panel (visual) */}
         <div className="hidden md:flex flex-col items-start justify-start gap-6 px-12 py-10 sm:py-12 bg-gradient-to-br from-gray-100 via-gray-50 to-white">
           <div className="w-16 h-16 rounded-full bg-white/90 border flex items-center justify-center shadow-sm">
-            <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className={`flex-shrink-0 ${styles.pageLogo}`} />
+            {/* <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className={`flex-shrink-0 ${styles.pageLogo}`} /> */}
+            <Image src="/DTG_Logo.svg" alt="DTG" className={`flex-shrink-0 ${styles.pageLogo}`} width={48} height={48} />
           </div>
           <div>
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">Let's Setup Your Account</h2>

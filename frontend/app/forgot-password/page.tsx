@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Mail } from "lucide-react";
 import { postApi } from "@/lib/apiClient";
 import styles from "./styles.module.css";
+import Image from "next/image";
 // small debounce hook
 function useDebounce<T>(value: T, delay = 400) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -174,7 +175,8 @@ export default function ForgotPasswordPage() {
         {/* Left side / intro (desktop only) */}
         <div className="hidden md:flex flex-col justify-center gap-4 bg-gradient-to-br from-primary/10 to-primary/5 px-10 py-12">
           <div className="h-14 w-14 rounded-full bg-background/70 flex items-center justify-center shadow">
-            <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className={`flex-shrink-0 ${styles.pageLogo}`} />
+            {/* <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className={`flex-shrink-0 ${styles.pageLogo}`} /> */}
+            <Image src="/DTG_Logo.svg" alt="DTG" className={`flex-shrink-0 ${styles.pageLogo}`} width={48} height={48} />
           </div>
           <h1 className="text-2xl font-semibold leading-snug">
             Forgot your password?

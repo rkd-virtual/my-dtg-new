@@ -1,5 +1,7 @@
-import { SiteHeader } from "@/components/site-header"
-import { Button } from "@/components/ui/button"
+// server component (no "use client" here)
+import { SiteHeader } from "@/components/site-header";
+import SitesList from "./_components/SitesList"; // client component
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -7,38 +9,12 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-
-const amazonSites = [
-  {
-    id: 1,
-    siteCode: "BOS3",
-    address: "123 Main St, Apt 4B",
-    city: "Boston, MA 02101",
-    isDefault: true,
-  },
-  {
-    id: 2,
-    siteCode: "JFK8",
-    address: "456 Office Blvd, Suite 200",
-    city: "New York, NY 10002",
-    isDefault: false,
-  },
-]
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function SettingsPage() {
   return (
@@ -57,7 +33,6 @@ export default function SettingsPage() {
         <Tabs defaultValue="account" className="w-full">
           <TabsList className="grid w-full grid-cols-3 lg:w-auto">
             <TabsTrigger value="account">Account</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="sites">Amazon Sites</TabsTrigger>
           </TabsList>
 
@@ -90,6 +65,7 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
               <CardFooter>
+                {/* no onClick in server component */}
                 <Button>Save Changes</Button>
               </CardFooter>
             </Card>
@@ -121,120 +97,24 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="notifications" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Notifications</CardTitle>
-                <CardDescription>
-                  Choose which emails you want to receive
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Order Updates</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive updates about your orders
-                    </p>
-                  </div>
-                  <Checkbox defaultChecked />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Promotional Emails</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive emails about sales and promotions
-                    </p>
-                  </div>
-                  <Checkbox defaultChecked />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Product Recommendations</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Get personalized product suggestions
-                    </p>
-                  </div>
-                  <Checkbox />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Newsletter</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Weekly newsletter with tips and updates
-                    </p>
-                  </div>
-                  <Checkbox defaultChecked />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button>Save Preferences</Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="sites" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Amazon Sites</CardTitle>
-                <CardDescription>
-                  Manage your Amazon fulfillment center sites
-                </CardDescription>
+                <CardDescription>Manage your Amazon fulfillment center sites</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Site Code</TableHead>
-                      <TableHead>Address</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {amazonSites.map((site) => (
-                      <TableRow key={site.id}>
-                        <TableCell className="font-medium font-mono">
-                          {site.siteCode}
-                        </TableCell>
-                        <TableCell>
-                          <div>{site.address}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {site.city}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {site.isDefault && (
-                            <Badge variant="default">Default</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive"
-                          >
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {/* client component contains the interactive Add/Edit/Delete buttons */}
+                <SitesList />
               </CardContent>
               <CardFooter>
-                <Button>Add New Site</Button>
+                {/* server-side button must not include event handlers */}
+                {/* <Button>Add New Site</Button> */}
               </CardFooter>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
     </>
-  )
+  );
 }
