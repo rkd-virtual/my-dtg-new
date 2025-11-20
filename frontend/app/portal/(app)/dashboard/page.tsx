@@ -116,8 +116,9 @@ export default function Page() {
         if (!siteSlug) throw new Error("Invalid site code");
 
         const normalized = siteSlug.toUpperCase();
-        const url = `https://dtg-backend.onrender.com/api/dashboard?site_code=${encodeURIComponent(normalized)}`;
+        //const url = `https://dtg-backend.onrender.com/api/dashboard?site_code=${encodeURIComponent(normalized)}`;
 
+        const url =  `${process.env.NEXT_PUBLIC_SITES_API}/dashboard?site_code=${encodeURIComponent(normalized)}`;
         const res = await fetch(url, {
           method: "GET",
           headers: { Accept: "application/json" },
@@ -149,7 +150,6 @@ export default function Page() {
     }
 
     fetchCountsForSite(siteToUse);
-
     return () => {
       aborted = true;
     };

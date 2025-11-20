@@ -112,12 +112,59 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       : user?.name || "John Doe";
   const email = user?.email || "johndoe@example.com";
 
-  // determine default site label (if available)
+  // --- live update override for default site (CustomEvent) ---
+  const [defaultSiteOverride, setDefaultSiteOverride] = React.useState<{
+    id?: number;
+    site_slug?: string;
+    label?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const handler = (ev: Event) => {
+  try {
+    const detail = (ev as CustomEvent).detail || {};
+
+        // 1. Update sidebar UI instantly
+        setDefaultSiteOverride({
+          id: detail.id,
+          site_slug: detail.site_slug,
+          label: detail.label,
+        });
+
+        // 2. Update sessionStorage for the whole app
+        if (detail.site_slug) {
+          sessionStorage.setItem(
+            "selectedAccount",
+            detail.site_slug   // or detail.label, depending on what other pages use
+          );
+        }
+      } catch (err) {
+        console.error("dtg:defaultSiteChanged parse error", err);
+      }
+    };
+
+    window.addEventListener("dtg:defaultSiteChanged", handler as EventListener);
+    return () => window.removeEventListener("dtg:defaultSiteChanged", handler as EventListener);
+  }, []);
+
+  // Optional: clear override when sites update from server so authoritative data wins
+  React.useEffect(() => {
+    setDefaultSiteOverride(null);
+  }, [sites]);
+
+  // determine default site label — prefer override
   const defaultSiteLabel = React.useMemo(() => {
+    if (defaultSiteOverride) {
+      if (defaultSiteOverride.label) return defaultSiteOverride.label;
+      if (defaultSiteOverride.site_slug) return `Amazon ${defaultSiteOverride.site_slug}`;
+    }
+
     if (!sites || sites.length === 0) return null;
     const def = sites.find((s) => s.is_default) || sites[0];
     return def?.label ?? null;
-  }, [sites]);
+  }, [sites, defaultSiteOverride]);
+
+  
 
   // logout handler: show overlay until signOut completes
   async function handleLogout() {
@@ -174,7 +221,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
+              <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5" >
                 <Link href="/portal/dashboard" className="flex items-center">
                   {/* <img src="/DTG_Logo copy.svg" alt="Logo" width={48} height={48} className="flex-shrink-0" /> */}
                   <Image src="/DTG_Logo.svg" alt="DTG" className="flex-shrink-0" width={48} height={48} />

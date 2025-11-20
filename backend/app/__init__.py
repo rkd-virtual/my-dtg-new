@@ -93,4 +93,14 @@ def create_app():
     # -----------------------------------------------------------
     # Return the fully configured app instance
     # -----------------------------------------------------------
+
+     # -----------------------------------------------------------
+    # Debug: Print all registered routes
+    # -----------------------------------------------------------
+    # with app.app_context():
+    #     print("\n=== Registered Routes ===")
+    #     for rule in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+    #         print(rule.rule, list(rule.methods))
+    #     print("=========================\n")
+
     return app

@@ -3,30 +3,44 @@ import { NextResponse } from "next/server";
 
 const FLASK_BASE = (process.env.FLASK_API_URL || process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/$/, "");
 
+function forwardHeaders(req: Request) {
+  const headers: Record<string, string> = {
+    accept: "application/json",
+  };
+  const cookie = req.headers.get("cookie");
+  if (cookie) headers["cookie"] = cookie;
+  const auth = req.headers.get("authorization");
+  if (auth) headers["authorization"] = auth;
+  const contentType = req.headers.get("content-type");
+  if (contentType) headers["content-type"] = contentType;
+  return headers;
+}
+
 export async function GET(req: Request) {
-  if (!FLASK_BASE) {
-    console.error("[proxy] FLASK_BASE not configured");
-    return NextResponse.json({ error: "flask_base_not_configured" }, { status: 500 });
-  }
-
+  if (!FLASK_BASE) return NextResponse.json({ error: "flask_base_not_configured" }, { status: 500 });
   const flaskUrl = `${FLASK_BASE}/api/user/sites`;
-  console.log(`[proxy] Forwarding GET to: ${flaskUrl}`);
+  const flaskRes = await fetch(flaskUrl, { method: "GET", headers: forwardHeaders(req) });
+  const text = await flaskRes.text();
+  return new NextResponse(text, { status: flaskRes.status, headers: { "content-type": flaskRes.headers.get("content-type") ?? "application/json" } });
+}
 
-  try {
-    const flaskRes = await fetch(flaskUrl, {
-      method: "GET",
-      headers: { cookie: req.headers.get("cookie") ?? "", accept: "application/json" },
-    });
+export async function POST(req: Request) {
+  if (!FLASK_BASE) return NextResponse.json({ error: "flask_base_not_configured" }, { status: 500 });
+  const flaskUrl = `${FLASK_BASE}/api/user/sites`;
+  // forward raw body so JSON stays intact
+  const body = await req.text();
+  const flaskRes = await fetch(flaskUrl, { method: "POST", headers: forwardHeaders(req), body });
+  const text = await flaskRes.text();
+  return new NextResponse(text, { status: flaskRes.status, headers: { "content-type": flaskRes.headers.get("content-type") ?? "application/json" } });
+}
 
-    const text = await flaskRes.text();
-    const contentType = flaskRes.headers.get("content-type") ?? "text/plain";
-
-    return new NextResponse(text, {
-      status: flaskRes.status,
-      headers: { "content-type": contentType },
-    });
-  } catch (err) {
-    console.error("[proxy] fetch error:", err);
-    return NextResponse.json({ error: "proxy_fetch_failed", detail: String(err) }, { status: 500 });
-  }
+/* optional OPTIONS handler to reduce preflight issues */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    },
+  });
 }
