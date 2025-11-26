@@ -118,4 +118,54 @@ class UserSite(db.Model):
             "is_default": bool(self.is_default),
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
+    
+# -------------------------------------------------------------------------
+# ShippingInformation: stores user's default shipping address (1:1)
+# -------------------------------------------------------------------------
+class ShippingInformation(db.Model):
+    __tablename__ = "shipping_information"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # 1:1 relation with users table
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    # Shipping fields
+    address1 = db.Column(db.String(255))
+    address2 = db.Column(db.String(255))
+    city     = db.Column(db.String(100))
+    state    = db.Column(db.String(100))
+    zip      = db.Column(db.String(20))
+    country  = db.Column(db.String(50))
+    shipto   = db.Column(db.String(255))
+
+    # Timestamps
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    # relationship back to User (1:1)
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "shipping_information",
+            uselist=False,
+            cascade="all, delete-orphan"
+        )
+    )
+
 

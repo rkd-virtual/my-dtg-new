@@ -95,7 +95,7 @@ def signup():
     db.session.commit()
 
     token = make_verify_token(user.id)
-    frontend = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    frontend = os.getenv("CORS_ORIGINS", "http://localhost:3000")
     verify_link = f"{frontend}/setup-profile?member={quote(token, safe='')}"
 
     # (existing email HTML builder) ...
@@ -794,6 +794,33 @@ def check_setup():
     # Otherwise they are allowed to continue
     return jsonify({"status": "allowed"}), 200
 
+# -----------------------------------------------------------
+# Change password section
+# -----------------------------------------------------------
+@auth_bp.put("/change-password")
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+
+    current = data.get("current_password")
+    new = data.get("new_password")
+
+    if not current or not new:
+        return jsonify(message="Missing fields"), 400
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    # Validate current password
+    if not user.check_password(current):
+        return jsonify(message="Current password is incorrect"), 400
+
+    user.set_password(new)
+    db.session.commit()
+
+    return jsonify(message="Password updated"), 200
 
 
 # -----------------------------------------------------------

@@ -1,7 +1,7 @@
-// portal/(app)/settings/_components/SiteList.tsx
+// portal/(app)/settings/_components/SitesList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -11,11 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-// Dialog (shadcn / radix-style pattern). If your project uses a different Dialog API,
-// update these imports accordingly.
+// Dialog (shadcn / radix-style pattern)
 import {
   Dialog,
   DialogTrigger,
@@ -26,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { Star, StarOff } from "lucide-react";
+import { toast } from "sonner";
 
 type Site = {
   id: number;
@@ -47,51 +46,36 @@ export default function SitesList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [toDelete, setToDelete] = useState<null | Site>(null);
 
-  // Toast
-  const [toast, setToast] = useState<{ msg: string } | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
-  const showToast = (msg: string) => {
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    setToast({ msg });
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
-  };
-
   useEffect(() => {
     let mounted = true;
     setLoading(true);
 
-    fetch("/api/settings/sites")
-      .then(async (res) => {
+    (async () => {
+      try {
+        const res = await fetch("/api/settings/sites", { credentials: "include" });
         if (!res.ok) {
-          const txt = await res.text();
+          const txt = await res.text().catch(() => res.statusText);
           throw new Error(txt || res.statusText);
         }
-        return res.json();
-      })
-      .then((data: Site[]) => {
+        const data = await res.json();
         if (!mounted) return;
         setSites(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => {
+      } catch (err: any) {
         console.error("Failed to fetch sites:", err);
         if (mounted) setError("Failed to load Amazon sites");
-      })
-      .finally(() => {
+        toast.error("Failed to load Amazon sites");
+      } finally {
         if (mounted) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       mounted = false;
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     };
   }, []);
 
-  // existing slugs for exclusion (normalized comparisons are used later)
   const existingSlugs = (sites || []).map((s) => (s.site_slug || "").trim()).filter(Boolean);
 
-  //
-  // Normalizer - strips leading "amazon", punctuation & lowercases for robust compares
-  //
   const normalize = (raw: string) =>
     (raw || "")
       .toString()
@@ -100,9 +84,6 @@ export default function SitesList() {
       .replace(/[^a-z0-9\-_.]/gi, " ")
       .trim();
 
-  //
-  // Tag-style Autocomplete (copied/adapted from setup-profile) including `exclude` and toast hooks
-  //
   const SITES_API = process.env.NEXT_PUBLIC_SITES_AUTOCOMPLETE_API || "/api/sites/search";
 
   const SitesTagAutocomplete: React.FC<{
@@ -111,7 +92,7 @@ export default function SitesList() {
     placeholder?: string;
     minChars?: number;
     exclude?: string[];
-    onAttemptExisting?: (slug: string) => void; // callback when user attempts to add an existing slug
+    onAttemptExisting?: (slug: string) => void;
   }> = ({ value, onChange, placeholder, minChars = 1, exclude = [], onAttemptExisting }) => {
     const parseCsv = (csv: string) =>
       (csv || "")
@@ -134,7 +115,6 @@ export default function SitesList() {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value]);
 
-    // inline hint if typed value already exists (in listing or in selected tags)
     useEffect(() => {
       const qNorm = normalize(query);
       if (!qNorm) {
@@ -247,7 +227,6 @@ export default function SitesList() {
       const candidateNorm = normalize(t);
 
       if (excludeNormalized.includes(candidateNorm)) {
-        // notify parent and show local hint; do not add
         onAttemptExisting?.(t);
         setQuery("");
         setSuggestions([]);
@@ -255,7 +234,7 @@ export default function SitesList() {
         return;
       }
       if (tagsNormalized.includes(candidateNorm)) {
-        showToast("Already selected.");
+        toast.error("Already selected.");
         setQuery("");
         setSuggestions([]);
         setOpen(false);
@@ -367,9 +346,6 @@ export default function SitesList() {
     );
   };
 
-  //
-  // Add / Default / Delete flows (Save uses comma-separated value from autocomplete)
-  //
   const [newSitesCsv, setNewSitesCsv] = useState<string>("");
 
   const saveNewSites = async () => {
@@ -382,7 +358,7 @@ export default function SitesList() {
       .filter((slug) => !existingNormalized.includes(normalize(slug)));
 
     if (chosen.length === 0) {
-      showToast("No new sites to add.");
+      toast.error("No new sites to add.");
       return;
     }
 
@@ -404,10 +380,11 @@ export default function SitesList() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (!res.ok) {
-        const txt = await res.text();
+        const txt = await res.text().catch(() => res.statusText);
         throw new Error(txt || res.statusText);
       }
 
@@ -416,78 +393,67 @@ export default function SitesList() {
         const withoutTemp = (prev || []).filter((p) => p.id > 0);
         return [...created, ...withoutTemp];
       });
-      showToast("Added successfully.");
-    } catch (e) {
+      toast.success("Added successfully.");
+    } catch (e: any) {
       console.error("Failed to create sites", e);
       setSites((prev) => (prev ? prev.filter((s) => s.id > 0) : []));
-      showToast("Failed to save sites.");
+      toast.error("Failed to save sites.");
     }
   };
 
   const onAttemptExisting = (slug: string) => {
-    // show toast when user tries to add an existing slug
-    showToast(`${slug} is already added.`);
+    toast.error(`${slug} is already added.`);
   };
 
- const setDefault = async (siteId: number) => {
-  const prev = sites ? sites.map((s) => ({ ...s })) : [];
+  const setDefault = async (siteId: number) => {
+    const prev = sites ? sites.map((s) => ({ ...s })) : [];
 
-  // Optimistic UI update
-  setSites((cur) =>
-    cur ? cur.map((s) => ({ ...s, is_default: s.id === siteId })) : cur
-  );
+    setSites((cur) => (cur ? cur.map((s) => ({ ...s, is_default: s.id === siteId })) : cur));
 
-  try {
-    const res = await fetch(`/api/settings/sites/${siteId}/default`, {
-      method: "PATCH",
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(txt || res.statusText);
-    }
-
-    // Try reading updated site info from backend (optional but better)
-    let payload: any = null;
     try {
-      payload = await res.json();
-    } catch {
-      payload = null;
-    }
+      const res = await fetch(`/api/settings/sites/${siteId}/default`, {
+        method: "PATCH",
+        credentials: "include",
+      });
 
-    // Find selected site locally as fallback
-    const fallback =
-      (sites || []).find((x) => x.id === siteId) || {
-        id: siteId,
-        site_slug: undefined,
-        label: undefined,
+      if (!res.ok) {
+        const txt = await res.text().catch(() => res.statusText);
+        throw new Error(txt || res.statusText);
+      }
+
+      let payload: any = null;
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
+      }
+
+      const fallback = (sites || []).find((x) => x.id === siteId) || { id: siteId, site_slug: undefined, label: undefined };
+
+      const updated = {
+        id: payload?.id ?? fallback.id,
+        site_slug: payload?.site_slug ?? fallback.site_slug,
+        label: payload?.label ?? fallback.label,
       };
 
-    const updated = {
-      id: payload?.id ?? fallback.id,
-      site_slug: payload?.site_slug ?? fallback.site_slug,
-      label: payload?.label ?? fallback.label,
-    };
+      window.dispatchEvent(
+        new CustomEvent("dtg:defaultSiteChanged", {
+          detail: updated,
+        })
+      );
 
-    // Dispatch global CustomEvent so sidebar updates instantly
-    window.dispatchEvent(
-      new CustomEvent("dtg:defaultSiteChanged", {
-        detail: updated,
-      })
-    );
-
-    showToast("Successfully changed the default site");
-  } catch (e) {
-    console.error("Failed to set default", e);
-    setSites(prev);
-    showToast("Failed to change default site.");
-  }
-};
+      toast.success("Successfully changed the default site");
+    } catch (e: any) {
+      console.error("Failed to set default", e);
+      setSites(prev);
+      toast.error("Failed to change default site.");
+    }
+  };
 
   const confirmDelete = (s: Site) => {
     if (s.is_default) {
-    showToast("Cannot delete the default site. First make another site the default.");
-    return;
+      toast.error("Cannot delete the default site. First make another site the default.");
+      return;
     }
     setToDelete(s);
     setDeleteOpen(true);
@@ -497,23 +463,21 @@ export default function SitesList() {
     if (!toDelete) return;
     const target = toDelete;
     const prev = sites ? [...sites] : [];
-    // optimistic remove
     setSites((cur) => (cur ? cur.filter((x) => x.id !== target.id) : cur));
     setDeleteOpen(false);
     setToDelete(null);
 
     try {
-      const res = await fetch(`/api/settings/sites/${target.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/settings/sites/${target.id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) {
-        const txt = await res.text();
+        const txt = await res.text().catch(() => res.statusText);
         throw new Error(txt || res.statusText);
       }
-      showToast("Successfully Deleted.");
-    } catch (e) {
+      toast.success("Successfully Deleted.");
+    } catch (e: any) {
       console.error("Delete failed", e);
-      // rollback
       setSites(prev);
-      showToast("Failed to delete site.");
+      toast.error("Failed to delete site.");
     }
   };
 
@@ -522,17 +486,9 @@ export default function SitesList() {
 
   return (
     <div>
-      {/* toast */}
-      {toast && (
-        <div className="fixed right-6 top-6 z-50">
-          <div className="rounded bg-black/90 text-white px-4 py-2 text-sm shadow">{toast.msg}</div>
-        </div>
-      )}
-
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-lg font-semibold">Amazon Sites</h3>
 
-        {/* DialogTrigger kept for compatibility with Dialog component if needed */}
         <Dialog open={addOpen} onOpenChange={(v: boolean) => setAddOpen(v)}>
           <DialogTrigger asChild>
             <Button onClick={() => setAddOpen(true)}>Add New Site</Button>
@@ -553,9 +509,7 @@ export default function SitesList() {
                 exclude={existingSlugs}
                 onAttemptExisting={onAttemptExisting}
               />
-              <div className="mt-2 text-sm text-muted-foreground">
-                You can select multiple sites.
-              </div>
+              <div className="mt-2 text-sm text-muted-foreground">You can select multiple sites.</div>
             </div>
 
             <DialogFooter className="flex justify-end gap-2">
@@ -574,8 +528,8 @@ export default function SitesList() {
             <TableRow>
               <TableHead>Site Code</TableHead>
               <TableHead>Label / Address</TableHead>
-              <TableHead></TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-middle">Actions</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -589,9 +543,8 @@ export default function SitesList() {
                     {s.address && <div className="text-sm text-muted-foreground">{s.address}</div>}
                   </TableCell>
 
-                  {/* --------- STATUS CELL: pill + star + ghost --------- */}
                   <TableCell>
-                    <div className="flex items-center justify-end gap-3">
+                    <div className="flex items-center justify-normal gap-3">
                       {s.is_default ? (
                         <span className="inline-flex items-center gap-2 rounded-full bg-black text-white px-3 py-1 text-xs font-medium shadow-sm">
                           <Star className="w-3.5 h-3.5" />
@@ -611,9 +564,8 @@ export default function SitesList() {
                     </div>
                   </TableCell>
 
-                  <TableCell className="text-right">
+                  <TableCell className="text-middle">
                     {s.is_default ? (
-                      // disabled delete button when it's the default
                       <button
                         className="inline-flex items-center justify-center text-sm px-3 py-1 rounded-md border border-gray-100 text-gray-400 cursor-not-allowed"
                         title="Default site cannot be deleted"
@@ -623,7 +575,7 @@ export default function SitesList() {
                         Delete
                       </button>
                     ) : (
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => confirmDelete(s)}>
+                      <Button variant="ghost" size="sm" className="text-destructive rounded-md border border-gray-100" onClick={() => confirmDelete(s)}>
                         Delete
                       </Button>
                     )}
@@ -632,16 +584,13 @@ export default function SitesList() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                  No sites found.
-                </TableCell>
+                <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No sites found.</TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={(v: boolean) => setDeleteOpen(v)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -653,12 +602,8 @@ export default function SitesList() {
           </div>
 
           <DialogFooter className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button className="text-destructive" onClick={doDelete}>
-              Delete
-            </Button>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button className="text-destructive" onClick={doDelete}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

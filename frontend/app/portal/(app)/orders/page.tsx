@@ -1,15 +1,14 @@
-"use client"
+"use client";
 
-import { SiteHeader } from "@/components/site-header"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,9 +16,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -27,34 +26,46 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { ChevronDownIcon, ChevronUpIcon, CheckCircleIcon, LoaderIcon, EditIcon, DownloadIcon, MoreVerticalIcon, MinusIcon, PlusIcon, TrashIcon } from "lucide-react"
-import { useState } from "react"
-import React from "react"
+} from "@/components/ui/dropdown-menu";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CheckCircleIcon,
+  LoaderIcon,
+  EditIcon,
+  DownloadIcon,
+  MoreVerticalIcon,
+  MinusIcon,
+  PlusIcon,
+  TrashIcon,
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import React from "react";
 
 // Orders and Quotes page with edit and PDF download functionality
 interface LineItem {
-  partNumber: string
-  name: string
-  quantity: number
-  price: string
-  tracking?: string
+  partNumber: string;
+  name: string;
+  quantity: number;
+  price: string;
+  tracking?: string;
 }
 
 interface OrderOrQuote {
-  id: string
-  type: "order" | "quote"
-  date: string
-  status: string
-  items: LineItem[]
-  total: number
-  tracking?: string
+  id: string;
+  type: "order" | "quote";
+  date: string;
+  status: string;
+  items: LineItem[];
+  total: number;
+  tracking?: string;
 }
 
 const ordersAndQuotes: OrderOrQuote[] = [
@@ -118,11 +129,11 @@ const ordersAndQuotes: OrderOrQuote[] = [
     ],
     total: 1649.92,
   },
-]
+];
 
 function StatusBadge({ status }: { status: string }) {
-  const isDone = status === "Delivered" || status === "Approved" || status === "Shipped"
-  const isInProcess = status === "Processing" || status === "Pending"
+  const isDone = status === "Delivered" || status === "Approved" || status === "Shipped";
+  const isInProcess = status === "Processing" || status === "Pending";
 
   return (
     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background">
@@ -132,90 +143,95 @@ function StatusBadge({ status }: { status: string }) {
         {status}
       </span>
     </div>
-  )
+  );
 }
 
 export default function OrdersPage() {
-  const [filter, setFilter] = useState<"all" | "order" | "quote">("all")
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  const [editingQuote, setEditingQuote] = useState<OrderOrQuote | null>(null)
-  const [editedItems, setEditedItems] = useState<LineItem[]>([])
-  const [showEditDialog, setShowEditDialog] = useState(false)
+  // filter is now only 'order' | 'quote'
+  const [filter, setFilter] = useState<"order" | "quote">("order");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [editingQuote, setEditingQuote] = useState<OrderOrQuote | null>(null);
+  const [editedItems, setEditedItems] = useState<LineItem[]>([]);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
-  const filteredData = ordersAndQuotes.filter((item) => {
-    if (filter === "all") return true
-    return item.type === filter
-  })
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // initialize filter from ?tab=orders|quotes (orders -> 'order', quotes -> 'quote')
+  useEffect(() => {
+    const tab = searchParams?.get("tab") ?? "";
+    if (tab === "quotes") setFilter("quote");
+    else setFilter("order"); // default to orders for any other value (including 'orders' or missing)
+  }, [searchParams]);
+
+  // helper to update query param (keeps existing 'site' if present)
+  const updateTabParam = (tab: "orders" | "quotes") => {
+    const params = new URLSearchParams(Array.from(searchParams?.entries() || []));
+    params.set("tab", tab);
+    const qs = params.toString();
+    router.push(`/portal/orders${qs ? `?${qs}` : ""}`);
+  };
+
+  const filteredData = useMemo(() => {
+    return ordersAndQuotes.filter((item) => (filter === "order" ? item.type === "order" : item.type === "quote"));
+  }, [filter]);
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
-    })
-  }
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
 
   const handleEditQuote = (quote: OrderOrQuote) => {
-    setEditingQuote(quote)
-    setEditedItems([...quote.items])
-    setShowEditDialog(true)
-  }
+    setEditingQuote(quote);
+    setEditedItems([...quote.items]);
+    setShowEditDialog(true);
+  };
 
   const handleUpdateQuantity = (partNumber: string, newQuantity: number) => {
     setEditedItems((items) =>
-      items.map((item) =>
-        item.partNumber === partNumber
-          ? { ...item, quantity: Math.max(1, newQuantity) }
-          : item
-      )
-    )
-  }
+      items.map((item) => (item.partNumber === partNumber ? { ...item, quantity: Math.max(1, newQuantity) } : item))
+    );
+  };
 
   const handleRemoveItem = (partNumber: string) => {
-    setEditedItems((items) => items.filter((item) => item.partNumber !== partNumber))
-  }
+    setEditedItems((items) => items.filter((item) => item.partNumber !== partNumber));
+  };
 
   const handleSaveQuote = () => {
     // In a real app, this would save to backend
-    console.log("Saving quote:", editingQuote?.id, editedItems)
-    setShowEditDialog(false)
-    setEditingQuote(null)
-  }
+    console.log("Saving quote:", editingQuote?.id, editedItems);
+    setShowEditDialog(false);
+    setEditingQuote(null);
+  };
 
   const handleCancelEdit = () => {
-    setShowEditDialog(false)
-    setEditingQuote(null)
-    setEditedItems([])
-  }
+    setShowEditDialog(false);
+    setEditingQuote(null);
+    setEditedItems([]);
+  };
 
   const calculateEditedTotal = () => {
-    return editedItems.reduce((sum, item) => {
-      return sum + parseFloat(item.price) * item.quantity
-    }, 0)
-  }
+    return editedItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+  };
 
   const handleDownloadPDF = (quote: OrderOrQuote) => {
-    // Generate PDF content
-    const pdfContent = generateQuotePDF(quote)
-
-    // Create blob and download
-    const blob = new Blob([pdfContent], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `quote-${quote.id}.html`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+    const pdfContent = generateQuotePDF(quote);
+    const blob = new Blob([pdfContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quote-${quote.id}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const generateQuotePDF = (quote: OrderOrQuote) => {
-    // Generate a professional HTML document for the quote
     return `
 <!DOCTYPE html>
 <html>
@@ -390,8 +406,8 @@ export default function OrdersPage() {
   </div>
 </body>
 </html>
-    `.trim()
-  }
+    `.trim();
+  };
 
   return (
     <>
@@ -400,29 +416,16 @@ export default function OrdersPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Orders & Quotes</h1>
-            <p className="text-muted-foreground">
-              View and track your orders and quote requests
-            </p>
+            <p className="text-muted-foreground">View and track your orders and quote requests</p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant={filter === "all" ? "default" : "outline"}
-            onClick={() => setFilter("all")}
-          >
-            All
-          </Button>
-          <Button
-            variant={filter === "order" ? "default" : "outline"}
-            onClick={() => setFilter("order")}
-          >
+          {/* Removed "All" button per request */}
+          <Button variant={filter === "order" ? "default" : "outline"} onClick={() => updateTabParam("orders")}>
             Orders
           </Button>
-          <Button
-            variant={filter === "quote" ? "default" : "outline"}
-            onClick={() => setFilter("quote")}
-          >
+          <Button variant={filter === "quote" ? "default" : "outline"} onClick={() => updateTabParam("quotes")}>
             Quotes
           </Button>
         </div>
@@ -430,9 +433,7 @@ export default function OrdersPage() {
         <Card>
           <CardHeader>
             <CardTitle>History</CardTitle>
-            <CardDescription>
-              Your recent orders and quote requests
-            </CardDescription>
+            <CardDescription>Your recent orders and quote requests</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -449,37 +450,23 @@ export default function OrdersPage() {
               </TableHeader>
               <TableBody>
                 {filteredData.map((item) => {
-                  const isExpanded = expandedRows.has(item.id)
-                  const totalQty = item.items.reduce((sum, lineItem) => sum + lineItem.quantity, 0)
-                  const itemsSummary = item.items.length === 1
-                    ? item.items[0].name
-                    : `${item.items[0].name} + ${item.items.length - 1} more`
+                  const isExpanded = expandedRows.has(item.id);
+                  const totalQty = item.items.reduce((sum, lineItem) => sum + lineItem.quantity, 0);
+                  const itemsSummary =
+                    item.items.length === 1 ? item.items[0].name : `${item.items[0].name} + ${item.items.length - 1} more`;
 
                   return (
                     <React.Fragment key={item.id}>
                       <TableRow className="hover:bg-muted/50">
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => toggleRow(item.id)}
-                          >
-                            {isExpanded ? (
-                              <ChevronUpIcon className="h-4 w-4" />
-                            ) : (
-                              <ChevronDownIcon className="h-4 w-4" />
-                            )}
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => toggleRow(item.id)}>
+                            {isExpanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
                           </Button>
                         </TableCell>
-                        <TableCell className="font-medium font-mono text-sm">
-                          {item.id}
-                        </TableCell>
+                        <TableCell className="font-medium font-mono text-sm">{item.id}</TableCell>
                         <TableCell className="max-w-[300px] truncate">{itemsSummary}</TableCell>
                         <TableCell className="text-center">{totalQty}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          ${item.total.toFixed(2)}
-                        </TableCell>
+                        <TableCell className="text-right font-semibold">${item.total.toFixed(2)}</TableCell>
                         <TableCell>
                           <StatusBadge status={item.status} />
                         </TableCell>
@@ -506,6 +493,7 @@ export default function OrdersPage() {
                           )}
                         </TableCell>
                       </TableRow>
+
                       {isExpanded && (
                         <TableRow>
                           <TableCell colSpan={7} className="bg-muted/30 p-0">
@@ -523,9 +511,7 @@ export default function OrdersPage() {
                                 <TableBody>
                                   {item.items.map((lineItem, idx) => (
                                     <TableRow key={`${item.id}-item-${idx}`}>
-                                      <TableCell className="font-mono text-sm">
-                                        {lineItem.partNumber}
-                                      </TableCell>
+                                      <TableCell className="font-mono text-sm">{lineItem.partNumber}</TableCell>
                                       <TableCell>{lineItem.name}</TableCell>
                                       <TableCell className="text-center">{lineItem.quantity}</TableCell>
                                       <TableCell className="text-right font-medium">
@@ -554,7 +540,7 @@ export default function OrdersPage() {
                         </TableRow>
                       )}
                     </React.Fragment>
-                  )
+                  );
                 })}
               </TableBody>
             </Table>
@@ -566,9 +552,7 @@ export default function OrdersPage() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Quote {editingQuote?.id}</DialogTitle>
-            <DialogDescription>
-              Update quantities or remove items from this quote.
-            </DialogDescription>
+            <DialogDescription>Update quantities or remove items from this quote.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -579,9 +563,7 @@ export default function OrdersPage() {
                     <div className="flex-1 space-y-2">
                       <div>
                         <h4 className="font-semibold">{item.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Part #: {item.partNumber}
-                        </p>
+                        <p className="text-sm text-muted-foreground">Part #: {item.partNumber}</p>
                       </div>
 
                       <div className="flex items-center gap-4">
@@ -590,14 +572,7 @@ export default function OrdersPage() {
                             Quantity:
                           </Label>
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                handleUpdateQuantity(item.partNumber, item.quantity - 1)
-                              }
-                            >
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleUpdateQuantity(item.partNumber, item.quantity - 1)}>
                               <MinusIcon className="h-3 w-3" />
                             </Button>
                             <Input
@@ -605,44 +580,23 @@ export default function OrdersPage() {
                               type="number"
                               min="1"
                               value={item.quantity}
-                              onChange={(e) =>
-                                handleUpdateQuantity(
-                                  item.partNumber,
-                                  parseInt(e.target.value) || 1
-                                )
-                              }
+                              onChange={(e) => handleUpdateQuantity(item.partNumber, parseInt(e.target.value) || 1)}
                               className="h-8 w-16 text-center"
                             />
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                handleUpdateQuantity(item.partNumber, item.quantity + 1)
-                              }
-                            >
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleUpdateQuantity(item.partNumber, item.quantity + 1)}>
                               <PlusIcon className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 ml-auto">
-                          <span className="text-sm text-muted-foreground">
-                            ${item.price} each
-                          </span>
-                          <span className="font-semibold">
-                            ${(parseFloat(item.price) * item.quantity).toFixed(2)}
-                          </span>
+                          <span className="text-sm text-muted-foreground">${item.price} each</span>
+                          <span className="font-semibold">${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => handleRemoveItem(item.partNumber)}
-                    >
+                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleRemoveItem(item.partNumber)}>
                       <TrashIcon className="h-4 w-4" />
                       <span className="sr-only">Remove item</span>
                     </Button>
@@ -651,18 +605,12 @@ export default function OrdersPage() {
               </Card>
             ))}
 
-            {editedItems.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No items in this quote. Add items to continue.
-              </div>
-            )}
+            {editedItems.length === 0 && <div className="text-center py-8 text-muted-foreground">No items in this quote. Add items to continue.</div>}
 
             <div className="pt-4 border-t">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold">Total:</span>
-                <span className="text-2xl font-bold">
-                  ${calculateEditedTotal().toFixed(2)}
-                </span>
+                <span className="text-2xl font-bold">${calculateEditedTotal().toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -678,5 +626,5 @@ export default function OrdersPage() {
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }
