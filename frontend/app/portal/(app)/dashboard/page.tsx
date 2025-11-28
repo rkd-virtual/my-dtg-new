@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/card";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { Item, ItemMedia, ItemContent, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
+import { LoaderIcon,ChevronDown } from "lucide-react"; // Import the arrow icon
 
 export default function Page() {
   const { sites, loading } = useAuth();
@@ -70,7 +70,8 @@ export default function Page() {
   useEffect(() => {
     let siteToUse: string | null = null;
 
-    if (selectedAccount && selectedAccount !== "all-accounts") siteToUse = selectedAccount;
+    if (selectedAccount && selectedAccount !== "all-accounts")
+      siteToUse = selectedAccount;
     else if (selectedAccount === "all-accounts") {
       if (sites && sites.length > 0) {
         const def = sites.find((s) => s.is_default) || sites[0];
@@ -154,68 +155,86 @@ export default function Page() {
 
   // build link to Orders & Quotes page with `tab` param and optional site param (omitted for 'all-accounts')
   const buildOrdersLink = (tab: "orders" | "quotes") => {
-    const base = "/portal/orders";
+    const base = "/portal/orders-quotes";
     const params = new URLSearchParams();
     params.set("tab", tab);
-   /*  if (selectValue && selectValue !== "all-accounts") {
-      params.set("site", selectValue);
-    } */
     const qs = params.toString();
     return qs ? `${base}?${qs}` : base;
-    //return qs ? `${base}` : base;
   };
 
   return (
     <>
       <SiteHeader title="Dashboard" />
       <div className="p-4 lg:p-6">
-        {loadingCounts && (
-          <div className="flex justify-start mb-6">
-            <div className="w-full sm:w-[400px] md:w-[320px] lg:w-[300px]">
-              <Item variant="muted">
-                <ItemMedia>
-                  <Spinner />
-                </ItemMedia>
-                <ItemContent>
-                  <ItemTitle className="line-clamp-1">Loading dashboard data…</ItemTitle>
-                </ItemContent>
-              </Item>
-            </div>
-          </div>
-        )}
-
         {showSelect && (
-          <div className="mb-6 flex justify-start">
-            <Card className="w-full sm:w-[400px] md:w-[320px] lg:w-[300px]">
-              <CardContent className="p-4">
-                <label htmlFor="account-select" className="text-sm font-semibold mb-2 block">
+          <div className="mb-6 flex items-center gap-4">
+            {/* The white card container */}
+            <Card className="max-w-md shadow-sm">
+              <CardContent className="p-3 flex items-center">
+                <label
+                  htmlFor="account-select"
+                  className="text-sm font-medium mr-3 whitespace-nowrap text-gray-900"
+                >
                   Select an Account
                 </label>
 
-                <select
-                  id="account-select"
-                  value={selectValue}
-                  onChange={(e) => {
-                    setSelectedAccount(e.target.value);
-                  }}
-                  className="rounded-md border px-3 py-2 text-sm shadow-sm w-full"
-                >
-                  <option value="all-accounts">All Accounts</option>
-                  {!loading && sites && sites.length > 0
-                    ? sites.map((s) => (
-                        <option key={s.id} value={s.site_slug}>
-                          {s.label}
-                        </option>
-                      ))
-                    : null}
-                </select>
+                {/* Relative wrapper to hold both the select and the custom arrow icon */}
+                <div className="relative">
+                  <select
+                    id="account-select"
+                    value={selectValue}
+                    onChange={(e) => {
+                      setSelectedAccount(e.target.value);
+                    }}
+                    className="
+                      block
+                      w-full
+                      appearance-none
+                      rounded-md
+                      border
+                      border-gray-300
+                      bg-white
+                      pl-3
+                      pr-8
+                      py-1.5
+                      text-sm
+                      font-medium
+                      text-gray-900
+                      shadow-sm
+                      focus:border-indigo-500
+                      focus:outline-none
+                      focus:ring-1
+                      focus:ring-indigo-500
+                      cursor-pointer
+                    "
+                    style={{ minWidth: "140px" }}
+                  >
+                    <option value="all-accounts">All Accounts</option>
+                    {!loading && sites && sites.length > 0
+                      ? sites.map((s) => (
+                          <option key={s.id} value={s.site_slug}>
+                            {s.label}
+                          </option>
+                        ))
+                      : null}
+                  </select>
+
+                  {/* Custom Arrow Icon - Absolute positioned */}
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                </div>
               </CardContent>
             </Card>
+
+            {/* Loading spinner outside the card */}
+            {loadingCounts && (
+              <div className="flex items-center text-sm text-blue-600">
+                <LoaderIcon className="h-5 w-5 animate-spin" />
+              </div>
+            )}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {/* Orders card — clickable, navigates to Orders & Quotes with tab=orders */}
           <Link
             href={buildOrdersLink("orders")}
             className="block focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-300 rounded-md"
@@ -235,7 +254,6 @@ export default function Page() {
             </Card>
           </Link>
 
-          {/* Quotes card — clickable, navigates to Orders & Quotes with tab=quotes */}
           <Link
             href={buildOrdersLink("quotes")}
             className="block focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-300 rounded-md"

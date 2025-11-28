@@ -32,7 +32,7 @@ import Image from "next/image";
 
 const baseNav = [
   { title: "Dashboard", url: "/portal/dashboard", icon: LayoutDashboardIcon },
-  { title: "Orders & Quotes", url: "/portal/orders?tab=orders", icon: PackageIcon },
+  { title: "Orders & Quotes", url: "/portal/orders-quotes", icon: PackageIcon },
   { title: "Shop", url: "/portal/shop", icon: StoreIcon },
   { title: "Quotes", url: "/portal/quotes", icon: FileTextIcon },
   { title: "Support", url: "/portal/support", icon: HeadphonesIcon },

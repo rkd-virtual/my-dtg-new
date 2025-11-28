@@ -118,35 +118,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   if (loading) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/10 p-6">
-      <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-6">
 
-        <div className="relative w-32 h-32 flex items-center justify-center">
+        {/* Start: Enhanced Loader Container */}
+        <div className="relative w-40 h-40 flex items-center justify-center">
 
-          {/* outer spinner ring */}
-          <Spinner
-            size={120}
-            className="text-muted-foreground/20 absolute inset-0 m-auto"
-          />
+            {/* 1. Background Ring (Static, Muted) - Base for the spinner */}
+            <div className="absolute inset-0 border-4 border-muted-foreground/10 rounded-full w-full h-full" />
 
-          {/* make logo perfectly centered with a small visual offset */}
-          <Image
-            src="/DTG_Logo.svg"
-            alt="DTG"
-            width={80}
-            height={80}
-            className="relative z-10 w-20 h-20 object-contain animate-pulse"
-            style={{
-              transform: "translateX(2px) translateY(15px)"
-            }}
-          />
+            {/* 2. Top Rotating Ring (Primary Color) */}
+            <Spinner
+                size={120}
+                className="text-green-500/80 absolute inset-0 m-auto animate-spin"
+            />
+            
+            {/* 3. Logo (Refined Centering) */}
+            <Image
+                src="/DTG_Logo.svg"
+                alt="DTG"
+                width={80}
+                height={80}
+                className="relative z-10 w-24 h-24 object-contain transition-transform duration-1000 ease-in-out"
+                style={{
+                    // FIX: Reverting to a small negative vertical offset to achieve visual center, 
+                    // relying mostly on the parent flex container for alignment.
+                    transform: 'translateY(10px)', 
+                    animation: 'scale-breathe 2s infinite alternate',
+                }}
+            />
+        </div>
+        {/* End: Enhanced Loader Container */}
+
+        <div className="text-center mt-2">
+            <div className="text-lg font-medium text-gray-800">Loading your data</div>
+            <div className="text-sm text-muted-foreground">Please wait while we prepare your account.</div>
         </div>
 
-        <div className="text-center">
-          <div className="text-lg font-medium">Loading…</div>
-          <div className="text-sm text-muted-foreground">Preparing your account</div>
-        </div>
-
-      </div>
+    </div>    
+    {/* Define custom keyframes if necessary for the 'scale-breathe' effect (optional, depends on your global CSS setup) */}
+    {/* <style jsx global>{`
+        @keyframes scale-breathe {
+            from { transform: scale(1.0); }
+            to { transform: scale(1.05); }
+        }
+    `}</style> 
+    */}
     </div>
   );
 }
