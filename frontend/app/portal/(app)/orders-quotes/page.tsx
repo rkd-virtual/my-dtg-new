@@ -38,7 +38,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   CheckCircleIcon,
-  LoaderIcon, // <-- CORRECTED: Ensure LoaderIcon is imported
+  LoaderIcon,
   EditIcon,
   DownloadIcon,
   MoreVerticalIcon,
@@ -75,6 +75,24 @@ interface OrderOrQuote {
 /* static fallback data kept for when remote is empty */
 const ordersAndQuotes: OrderOrQuote[] = [];
 
+// NEW HELPER FUNCTION: Format number as comma-separated USD currency
+const formatCurrency = (amount: number | string | null | undefined): string => {
+    if (amount === null || amount === undefined) {
+        return '$0.00';
+    }
+    const numberAmount = Number(amount);
+    if (isNaN(numberAmount)) {
+        return '$0.00';
+    }
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(numberAmount);
+};
+
+
 /* small UI helpers */
 function StatusBadge({ status }: { status?: string | null }) {
   const s = (status ?? "").toString().trim();
@@ -89,23 +107,24 @@ function StatusBadge({ status }: { status?: string | null }) {
     case "Shipped":
     case "Delivered":
       // Green for completed actions
-      classes += "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-400";
+      classes += "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background text-green-600";
       icon = <CheckCircleIcon className="h-4 w-4" />;
       break;
     case "Approved":
+    case "Invoiced": // Added Invoiced status
       // Blue for positive status
-      classes += "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-400";
+      classes += "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background text-blue-800";
       icon = <CheckCircleIcon className="h-4 w-4" />;
       break;
     case "Processing":
     case "Pending":
       // Yellow/Orange for in-progress
-      classes += "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400";
+      classes += "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background text-yellow-800";
       icon = <LoaderIcon className="h-4 w-4 animate-spin" />;
       break;
     case "Open":
       // Gray for default/initial state
-      classes += "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+      classes += "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-background text-gray-800";
       icon = <LoaderIcon className="h-4 w-4" />;
       break;
     case "Cancelled":
@@ -144,18 +163,26 @@ function Pagination({
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
 
+  // FIX: Define pagesToShow so it is accessible
   const pagesToShow = (() => {
     const pages: number[] = [];
     const startP = Math.max(1, page - 2);
     const endP = Math.min(totalPages, page + 2);
     for (let p = startP; p <= endP; p++) pages.push(p);
     return pages;
-  })();
+  })(); // <--- The function is immediately invoked and its result stored in pagesToShow
+
+  // FIX: If total is genuinely zero, return null/hide controls. 
+  // The central TableBody handles the "No items" message.
+  if (total === 0) {
+      return null;
+  }
+
 
   return (
     <div className="mt-4 flex items-center justify-between">
       <div className="text-sm text-muted-foreground">
-        {total === 0 ? "No items" : `Showing ${start}-${end} of ${total}`}
+        {`Showing ${start}-${end} of ${total}`}
       </div>
 
       <div className="flex items-center gap-2">
@@ -755,18 +782,17 @@ export default function OrdersPage() {
                 <TableRow>
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="w-[220px]">Order ID</TableHead>
-                  <TableHead>Items</TableHead>
+                  <TableHead className="w-[220px]">Items</TableHead>
                   <TableHead className="w-[80px] text-center">Qty.</TableHead>
                   <TableHead className="w-[120px] text-right">Total</TableHead>
                   {/* Parent-level Status column */}
-                  <TableHead className="w-[120px]">Status</TableHead>
+                  <TableHead className="w-[120px] text-center">Status</TableHead>
                   {/* DYNAMIC HEADER: Show "Tracking" for Orders, "Actions" for Quotes */}
                   <TableHead className="w-[100px]">{filter === "order" ? "Tracking" : "Actions"}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody 
                 // FIX: Apply a min-height to the TableBody to prevent layout shift (CLS)
-                // This ensures the pagination element does not jump up/down.
                 style={{ minHeight: '250px' }}
               >
                 {/* Display loading status inside the table when fetching data 
@@ -784,7 +810,15 @@ export default function OrdersPage() {
                 ) : listingData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {remoteError ? `Error: ${remoteError}` : (filter === "quote" ? "No quotes found" : "No orders found")}
+                      {/* REFINED MESSAGE: Check if the total count is zero. 
+                         If total is 0, show the full "No items found" message, otherwise show a data gap message
+                      */}
+                      {Number(totalItems || 0) === 0 ? 
+                        (remoteError ? `Error: ${remoteError}` : (filter === "quote" ? "No quotes found" : "No orders found"))
+                        : 
+                        // If totalItems > 0 but the page is empty, this means there was a data gap/problem on that page
+                        "No items available on this page or data gap detected."
+                      }
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -801,13 +835,21 @@ export default function OrdersPage() {
 
                     const totalNumber = Number.isFinite(Number(item.total)) ? Number(item.total) : item.items.reduce((s, li) => s + (parseFloat(li.price || "0") || 0) * (li.quantity || 0), 0);
 
+                    // Determine if the item has line items
+                    const hasLineItems = item.items.length > 0;
+
                     return (
                       <React.Fragment key={item.id}>
                         <TableRow className="hover:bg-muted/50">
                           <TableCell>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => toggleRow(item.id)}>
-                              {isExpanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
-                            </Button>
+                            {/* FIX: Only show the expansion button if there are line items to display */}
+                            {hasLineItems ? (
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => toggleRow(item.id)}>
+                                    {isExpanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+                                </Button>
+                            ) : (
+                                <span className="text-sm text-muted-foreground w-8 text-center ml-2">—</span>
+                            )}
                           </TableCell>
 
                           <TableCell className="font-medium font-mono text-sm break-words">{filter === "order" ? "Order" : "Quote#"}: {item.id}</TableCell>
@@ -816,7 +858,8 @@ export default function OrdersPage() {
 
                           <TableCell className="text-center">{totalQty}</TableCell>
 
-                          <TableCell className="text-right font-semibold">${Number(totalNumber || 0).toFixed(2)}</TableCell>
+                          {/* FORMATTING FIX: Use formatCurrency */}
+                          <TableCell className="text-right font-semibold">{formatCurrency(totalNumber)}</TableCell>
 
                           {/* Display the top-level status for the parent row using the enhanced badge */}
                           <TableCell>
@@ -834,22 +877,30 @@ export default function OrdersPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleEditQuote(item)}>
-                                    <EditIcon className="h-4 w-4 mr-2" />
-                                    Edit Quote
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDownloadPDF(item)}
-                                    disabled={downloadingQuoteId === item.id}
-                                  >
-                                    {downloadingQuoteId === item.id ? (
-                                        <LoaderIcon className="h-4 w-4 mr-2 animate-spin" />
-                                    ) : (
-                                        <DownloadIcon className="h-4 w-4 mr-2" />
-                                    )}
-                                    Download PDF
-                                  </DropdownMenuItem>
-                                  {/* Delete Quote */}
+                                  {/* FIX: Hide Edit Quote if no line items */}
+                                  {hasLineItems && (
+                                      <DropdownMenuItem onClick={() => handleEditQuote(item)}>
+                                        <EditIcon className="h-4 w-4 mr-2" />
+                                        Edit Quote
+                                      </DropdownMenuItem>
+                                  )}
+                                  
+                                  {/* FIX: Hide Download PDF if no line items */}
+                                  {hasLineItems && (
+                                      <DropdownMenuItem 
+                                        onClick={() => handleDownloadPDF(item)}
+                                        disabled={downloadingQuoteId === item.id}
+                                      >
+                                        {downloadingQuoteId === item.id ? (
+                                            <LoaderIcon className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <DownloadIcon className="h-4 w-4 mr-2" />
+                                        )}
+                                        Download PDF
+                                      </DropdownMenuItem>
+                                  )}
+                                  
+                                  {/* Delete Quote (Always visible) */}
                                   <DropdownMenuItem 
                                     onClick={() => handleDeleteQuoteConfirmation(item)}
                                     className="text-red-600 focus:text-red-600"
@@ -875,7 +926,7 @@ export default function OrdersPage() {
                           </TableCell>
                         </TableRow>
 
-                        {isExpanded && (
+                        {isExpanded && hasLineItems && ( // Only render expanded rows if items exist
                           <TableRow>
                             <TableCell colSpan={7} className="bg-muted/30 p-0">
                               <div className="p-4">
@@ -888,7 +939,7 @@ export default function OrdersPage() {
                                       <TableHead className="w-[10%] text-right">Price</TableHead>
                                       <TableHead className="w-[10%] text-right">Total</TableHead>
                                       {/* Status column for line item */}
-                                      <TableHead className="w-[10%]">Status</TableHead>
+                                      <TableHead className="w-[10%] text-center">Status</TableHead>
                                       {/* Dedicated Tracking URL column */}
                                       <TableHead className="w-[130px]">Tracking</TableHead>
                                     </TableRow>
@@ -925,9 +976,11 @@ export default function OrdersPage() {
 
                                           <TableCell className="text-center">{qty}</TableCell>
 
-                                          <TableCell className="text-right font-medium">${unitPrice.toFixed(2)}</TableCell>
+                                          {/* FORMATTING FIX: Use formatCurrency */}
+                                          <TableCell className="text-right font-medium">{formatCurrency(unitPrice)}</TableCell>
 
-                                          <TableCell className="text-right font-medium">${lineTotal.toFixed(2)}</TableCell>
+                                          {/* FORMATTING FIX: Use formatCurrency */}
+                                          <TableCell className="text-right font-medium">{formatCurrency(lineTotal)}</TableCell>
 
                                           {/* Show StatusBadge for both orders and quotes line items */}
                                           <TableCell>
@@ -948,10 +1001,11 @@ export default function OrdersPage() {
                                         Total
                                       </TableCell>
                                       <TableCell className="text-right font-semibold">
-                                        $
-                                        {item.items
-                                          .reduce((s, li) => s + (parseFloat(li.price || "0") || 0) * (li.quantity || 0), 0)
-                                          .toFixed(2)}
+                                        {/* FORMATTING FIX: Use formatCurrency */}
+                                        {formatCurrency(
+                                          item.items
+                                            .reduce((s, li) => s + (parseFloat(li.price || "0") || 0) * (li.quantity || 0), 0)
+                                        )}
                                       </TableCell>
                                       <TableCell colSpan={2} /> {/* Cover Status and Tracking columns */}
                                     </TableRow>
@@ -968,6 +1022,7 @@ export default function OrdersPage() {
               </TableBody>
             </Table>
 
+            {/* Pagination is now responsible for handling its own visibility message */}
             <Pagination page={page} pageSize={pageSize} total={Number(totalItems || 0)} onChange={handlePageChange} />
           </CardContent>
         </Card>
@@ -1015,8 +1070,8 @@ export default function OrdersPage() {
                         </div>
 
                         <div className="flex items-center gap-2 ml-auto">
-                          <span className="text-sm text-muted-foreground">${item.price} each</span>
-                          <span className="font-semibold">${(parseFloat(item.price || "0") * item.quantity).toFixed(2)}</span>
+                          <span className="text-sm text-muted-foreground">{formatCurrency(item.price)} each</span>
+                          <span className="font-semibold">{formatCurrency(parseFloat(item.price || "0") * item.quantity)}</span>
                         </div>
                       </div>
                     </div>
@@ -1035,7 +1090,7 @@ export default function OrdersPage() {
             <div className="pt-4 border-t">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold">Total:</span>
-                <span className="text-2xl font-bold">${calculateEditedTotal().toFixed(2)}</span>
+                <span className="text-2xl font-bold">{formatCurrency(calculateEditedTotal())}</span>
               </div>
             </div>
           </div>
