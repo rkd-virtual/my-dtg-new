@@ -11,6 +11,7 @@ from .extensions import db, migrate, jwt, cors
 from .routes.auth import auth_bp,profile_bp
 from .routes.settings import settings_bp
 from .routes.user_sites import bp as user_sites_bp
+from .routes.products import products_bp
 
 def create_app():
     """
@@ -68,6 +69,9 @@ def create_app():
     
     # User sites routes (GET /api/user/sites)
     app.register_blueprint(user_sites_bp, url_prefix="/api/user")
+
+    #Product routes
+    app.register_blueprint(products_bp)
 
     # -----------------------------------------------------------
     # Root route for quick health check / info

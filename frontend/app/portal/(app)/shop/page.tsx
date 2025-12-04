@@ -1,4 +1,5 @@
 "use client"
+// portal/(app)/shop/page.tsx
 
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
@@ -10,21 +11,22 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { SearchIcon, MinusIcon, PlusIcon } from "lucide-react"
+import { AlertCircle, SearchIcon, MinusIcon, PlusIcon } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
-import Papa from "papaparse"
 import { useQuote } from "@/contexts/quote-context"
-import { useCart } from "@/contexts/cart-context"
-import { useRouter } from "next/navigation"
+import { getApi } from "@/lib/apiClient"
+import { toast } from "sonner"
+import Image from "next/image";
 
 interface Product {
-  Name: string
-  "Part Number": string
-  Category: string
-  Notes: string
-  Price: string
-  Archived: string
-  Image: string
+  id: number
+  name: string
+  partNumber: string
+  category: string
+  price: number
+  notes?: string
+  image?: string
+  archived?: boolean
 }
 
 export default function ShopPage() {
@@ -32,156 +34,160 @@ export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("All Products")
-  const { addItem } = useQuote()
-  const { addItem: addToCart } = useCart()
-  const router = useRouter()
+  const { addItem, items: quoteItems } = useQuote()
 
   useEffect(() => {
-    fetch("/data/products.csv")
-      .then((response) => response.text())
-      .then((csv) => {
-        Papa.parse<Product>(csv, {
-          header: true,
-          complete: (results) => {
-            const filtered = results.data.filter(
-              (product) =>
-                product.Name &&
-                product["Part Number"] &&
-                product.Category &&
-                product.Archived !== "true"
-            )
-            setProducts(filtered)
-            setLoading(false)
-          },
-        })
-      })
+    const controller = new AbortController()
+
+    const fetchProducts = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const payload = await getApi("/products", { signal: controller.signal })
+
+        if (!payload) throw new Error("Empty API response")
+
+        if (payload.success && Array.isArray(payload.data?.products)) {
+          const normalized: Product[] = payload.data.products
+            .map((p: any) => ({
+              ...p,
+              price:
+                typeof p.price === "number"
+                  ? p.price
+                  : Number.parseFloat(String(p.price)) || 0,
+            }))
+            .filter((p: Product) => !p.archived)
+
+          setProducts(normalized)
+        } else {
+          throw new Error(payload.message || "Failed to load products")
+        }
+      } catch (err) {
+        if ((err as any)?.name !== "AbortError") {
+          setError(err instanceof Error ? err.message : String(err))
+          console.error("Error fetching products:", err)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProducts()
+    return () => controller.abort()
   }, [])
 
+  // group products and sort products alphabetically per category
   const productsByCategory = useMemo(() => {
     const grouped: Record<string, Product[]> = {}
+
     products.forEach((product) => {
-      const category = product.Category || "Other"
-      if (!grouped[category]) {
-        grouped[category] = []
-      }
+      const category = product.category || "Other"
+      if (!grouped[category]) grouped[category] = []
       grouped[category].push(product)
     })
+
+    // sort products inside each category alphabetically by name (case-insensitive)
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      )
+    })
+
     return grouped
   }, [products])
 
+  // categories alphabetically
   const allCategories = useMemo(() => {
-    const categories = Object.keys(productsByCategory)
-    const order = ["Cart", "Power", "Wiring"]
-    return categories.sort((catA, catB) => {
-      const indexA = order.indexOf(catA)
-      const indexB = order.indexOf(catB)
-
-      if (indexA !== -1 && indexB !== -1) return indexA - indexB
-      if (indexA !== -1) return -1
-      if (indexB !== -1) return 1
-      return catA.localeCompare(catB)
-    })
+    return Object.keys(productsByCategory).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    )
   }, [productsByCategory])
 
+  // filter logic (search + selected category)
   const filteredProductsByCategory = useMemo(() => {
-    let baseCategories = productsByCategory
+    let base = productsByCategory
 
-    // Filter by search query
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
+      const q = searchQuery.toLowerCase()
       const filtered: Record<string, Product[]> = {}
 
       Object.entries(productsByCategory).forEach(([category, items]) => {
-        const matchingProducts = items.filter(
-          (product) =>
-            product.Name.toLowerCase().includes(query) ||
-            product["Part Number"].toLowerCase().includes(query)
+        const matches = items.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.partNumber.toLowerCase().includes(q)
         )
-        if (matchingProducts.length > 0) {
-          filtered[category] = matchingProducts
-        }
+        if (matches.length) filtered[category] = matches
       })
 
-      baseCategories = filtered
+      base = filtered
     }
 
-    // Filter by selected category
     if (selectedCategory !== "All Products") {
-      baseCategories = {
-        [selectedCategory]: baseCategories[selectedCategory] || []
+      base = {
+        [selectedCategory]: base[selectedCategory] || [],
       }
     }
 
-    // Sort categories: Cart first, then Power, then Wiring, then alphabetically
-    const sortedEntries = Object.entries(baseCategories).sort(([catA], [catB]) => {
-      const order = ["Cart", "Power", "Wiring"]
-      const indexA = order.indexOf(catA)
-      const indexB = order.indexOf(catB)
-
-      if (indexA !== -1 && indexB !== -1) return indexA - indexB
-      if (indexA !== -1) return -1
-      if (indexB !== -1) return 1
-      return catA.localeCompare(catB)
-    })
-
-    return Object.fromEntries(sortedEntries)
+    return base
   }, [productsByCategory, searchQuery, selectedCategory])
 
-  const updateQuantity = (productId: string, change: number) => {
+  const updateQuantity = (id: string, change: number) => {
     setQuantities((prev) => {
-      const current = prev[productId] || 1
-      const newValue = Math.max(1, current + change)
-      return { ...prev, [productId]: newValue }
+      const current = prev[id] ?? 1
+      const next = Math.max(1, current + change)
+      return { ...prev, [id]: next }
     })
   }
 
-  const getQuantity = (productId: string) => quantities[productId] || 1
+  const getQuantity = (id: string) => quantities[id] ?? 1
 
   const handleAddToQuote = (product: Product) => {
-    const quantity = getQuantity(product["Part Number"])
-    addItem({
-      partNumber: product["Part Number"],
-      name: product.Name,
-      price: product.Price,
-      quantity,
-      image: product.Image,
-      notes: product.Notes,
-    })
-    // Reset quantity after adding
-    setQuantities((prev) => {
-      const newQuantities = { ...prev }
-      delete newQuantities[product["Part Number"]]
-      return newQuantities
-    })
-    // Navigate to quotes page
-    router.push("/quotes")
-  }
+    const quantity = getQuantity(product.partNumber)
 
-  const handleAddToCart = (product: Product) => {
-    const quantity = getQuantity(product["Part Number"])
-    addToCart({
-      partNumber: product["Part Number"],
-      name: product.Name,
-      price: product.Price,
+    addItem({
+      partNumber: product.partNumber,
+      name: product.name,
+      price:
+        typeof product.price === "number"
+          ? product.price.toFixed(2)
+          : String(product.price ?? ""),
       quantity,
-      image: product.Image,
-      notes: product.Notes,
+      image: product.image,
+      notes: product.notes,
     })
-    // Reset quantity after adding
+
     setQuantities((prev) => {
-      const newQuantities = { ...prev }
-      delete newQuantities[product["Part Number"]]
-      return newQuantities
+      const updated = { ...prev }
+      delete updated[product.partNumber]
+      return updated
     })
+
+    toast.success("Item added to the Quote successfully", {
+    icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+    });
   }
 
   if (loading) {
     return (
       <>
         <SiteHeader title="Shop" />
-        <div className="flex flex-1 items-center justify-center p-4">
+        <div className="flex flex-1 items-center justify-center p-6">
           <p className="text-muted-foreground">Loading products...</p>
+        </div>
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        <SiteHeader title="Shop" />
+        <div className="flex flex-1 items-center justify-center p-6">
+          <p className="text-red-500">{error}</p>
         </div>
       </>
     )
@@ -190,125 +196,142 @@ export default function ShopPage() {
   return (
     <>
       <SiteHeader title="Shop" />
+
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Shop</h1>
-            <p className="text-muted-foreground">
-              Browse our catalog and add items to your quote
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold">Shop</h1>
+          <p className="text-muted-foreground">
+            Browse our catalog and add items to your quote
+          </p>
         </div>
 
-        <div className="space-y-4">
-          <div className="relative max-w-2xl">
+        <div className="sticky top-4 z-20 bg-white/90 backdrop-blur-sm rounded-md py-2 px-3 max-w-2xl">
+          <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              type="search"
-              placeholder="Search by part number or description..."
+              placeholder="Search..."
               className="pl-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={selectedCategory === "All Products" ? "default" : "outline"}
-              onClick={() => setSelectedCategory("All Products")}
-            >
-              All Products
-            </Button>
-            {allCategories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                onClick={() => setSelectedCategory(category)}
-              >
-                {category}
-              </Button>
-            ))}
-          </div>
         </div>
 
-        {Object.entries(filteredProductsByCategory).length === 0 ? (
-          <div className="flex flex-1 items-center justify-center p-12">
-            <p className="text-muted-foreground">No products found matching your search.</p>
-          </div>
-        ) : (
-          Object.entries(filteredProductsByCategory).map(([category, categoryProducts]) => (
-            <div key={category} className="space-y-4">
-              <h2 className="text-2xl font-semibold">{category}</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {categoryProducts.map((product) => {
-                  const productId = product["Part Number"]
-                  return (
-                    <Card key={productId}>
-                      <CardHeader>
-                        {product.Image && (
-                          <div className="aspect-square rounded-lg bg-muted mb-4 flex items-center justify-center overflow-hidden">
-                            <img
-                              src={product.Image}
-                              alt={product.Name}
-                              className="w-full h-full object-contain"
-                            />
+        {/* category buttons */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={selectedCategory === "All Products" ? "default" : "outline"}
+            onClick={() => setSelectedCategory("All Products")}
+          >
+            All Products
+          </Button>
+
+          {allCategories.map((cat) => (
+            <Button
+              key={cat}
+              variant={selectedCategory === cat ? "default" : "outline"}
+              onClick={() => setSelectedCategory(cat)}
+            >
+              {cat}
+            </Button>
+          ))}
+        </div>
+
+        {/* render categories in the order of allCategories (alphabetical),
+            and only show categories present in filteredProductsByCategory */}
+        {allCategories
+          .filter((cat) => (filteredProductsByCategory[cat] || []).length > 0)
+          .map((category) => {
+            const items = filteredProductsByCategory[category] || []
+
+            return (
+              <div key={category} className="space-y-4">
+                <h2 className="text-xl font-semibold">{category}</h2>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {items.map((product) => {
+                    const id = product.partNumber
+
+                    // determine if this product is already in the quote (disable button)
+                    const isAdded = quoteItems.some(
+                      (qi) => qi.partNumber === product.partNumber
+                    )
+
+                    return (
+                      <Card key={id}>
+                        <CardHeader>
+                          {product.image && (
+                            <div className="aspect-square bg-muted rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.name}
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                          )}
+
+                          <CardTitle className="text-lg">{product.name}</CardTitle>
+                          <CardDescription className="text-xs">
+                            Part #: {product.partNumber}
+                          </CardDescription>
+                        </CardHeader>
+
+                        <CardContent className="space-y-4">
+                          <p className="text-sm text-muted-foreground line-clamp-3">
+                            {product.notes}
+                          </p>
+
+                          <div className="text-2xl font-bold">
+                            ${product.price.toFixed(2)}
                           </div>
-                        )}
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <CardTitle className="text-lg leading-tight">
-                              {product.Name}
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                              Part #: {product["Part Number"]}
-                            </CardDescription>
+
+                          {/* Quantity area: always reserve height so cards align */}
+                          <div className="flex items-center justify-center gap-2 h-10">
+                            {isAdded ? (
+                              // reserved empty block keeps card height consistent
+                              <div className="h-8 w-full" />
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => updateQuantity(id, -1)}
+                                >
+                                  <MinusIcon className="h-4 w-4" />
+                                </Button>
+
+                                <span className="w-10 text-center">{getQuantity(id)}</span>
+
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => updateQuantity(id, 1)}
+                                >
+                                  <PlusIcon className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <p className="text-sm text-muted-foreground line-clamp-3">
-                          {product.Notes || "No description available"}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-2xl font-bold">
-                            ${product.Price}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mb-2">
+
                           <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => updateQuantity(productId, -1)}
+                            className={`w-full h-10 transition-colors disabled:opacity-70 ${
+                              isAdded ? "bg-gray-200 text-gray-600 hover:bg-gray-200" : ""
+                            }`}
+                            onClick={() => handleAddToQuote(product)}
+                            disabled={isAdded}
                           >
-                            <MinusIcon className="h-4 w-4" />
+                            {isAdded ? "Item added" : "Add to Quote"}
                           </Button>
-                          <span className="w-12 text-center font-medium">
-                            {getQuantity(productId)}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => updateQuantity(productId, 1)}
-                          >
-                            <PlusIcon className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Button
-                          className="w-full"
-                          onClick={() => handleAddToQuote(product)}
-                        >
-                          Add to Quote
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))
-        )}
+            )
+          })}
       </div>
     </>
   )
