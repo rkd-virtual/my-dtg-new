@@ -10,13 +10,13 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from sqlalchemy.exc import SQLAlchemyError
 import os, json
-
+import requests
 
 # -----------------------------------------------------------
 # Import app-specific modules for database and helpers
 # -----------------------------------------------------------
 from ..extensions import db
-from ..models import User, UserProfile, UserSite
+from ..models import User, UserProfile, UserSite, ShippingInformation
 from ..utils import make_verify_token, load_verify_token, send_mail, generate_reset_code
 
 # Helper: ensure value becomes a list of non-empty strings
@@ -305,7 +305,7 @@ def setup_profile():
 
     Normalizes amazon_site -> list of strings, each prefixed with "Amazon " if necessary,
     stores into UserProfile.amazon_site (ARRAY) and also syncs rows into user_sites
-    (site_slug, label, is_default) before committing.
+    (site_slug, label, is_default) and calls external API to insert into shipping_information.
     """
     data = request.get_json(silent=True) or {}
     token = (data.get("token") or "").strip()
@@ -378,7 +378,7 @@ def setup_profile():
 
         # amazon_site: normalize into full labels "Amazon <CODE>" and store as list (ARRAY)
         raw_site = data.get("amazon_site")
-        site_items = listify(raw_site)  # ["CTZ"] or ["Amazon CTZ"] or []
+        site_items = listify(raw_site) 
         normalized_sites = []
         for item in site_items:
             if not item:
@@ -412,14 +412,68 @@ def setup_profile():
         db.session.add(profile)
         db.session.add(user)
 
+        # ----------------------------------------------------
+        # NEW ENHANCEMENT: Fetch and Insert Shipping Information
+        # ----------------------------------------------------
+        first_name = profile.first_name if profile.first_name else data.get("first_name", "Unknown")
+        last_name = profile.last_name if profile.last_name else data.get("last_name", "User")
+        
+        # We process ALL new or existing amazon_sites for address lookup
+        sites_to_process = normalized_sites # uses the cleaned, normalized sites from above
+
+        for full_account_name in sites_to_process:
+            try:
+                # 1. Prepare the payload for the external API call
+                api_payload = {
+                    "account_name": full_account_name,
+                    "first_name": first_name,
+                    "last_name": last_name
+                }
+                
+                # 2. Construct the API URL (Using the provided environment variable pattern)
+                api_url = current_app.config.get("AMAZON_SITE_API_URL", "https://dtg-backend.onrender.com/")
+                fetch_address_url = api_url.rstrip('/') + "/api/fetch-address"
+                
+                # 3. Call the external API
+                response = requests.post(fetch_address_url, json=api_payload, timeout=5)
+                response.raise_for_status() # Raises an HTTPError for bad responses (4xx or 5xx)
+                address_data = response.json()
+                
+                # 4. Insert the fetched address data into shipping_information table
+                # Assuming you have a ShippingInformation ORM Model defined
+                
+                # Prepare 'shipto' using first_name and last_name (fetched from profile/data)
+                shipto_name = f"{first_name} {last_name}".strip()
+                
+                new_shipping_info = ShippingInformation(
+                    user_id=uid,
+                    address1=s(address_data.get("address1")),
+                    address2=s(address_data.get("address2")),
+                    city=s(address_data.get("city")),
+                    state=s(address_data.get("state")),
+                    zip=s(address_data.get("zip")),
+                    country=s(address_data.get("country")),
+                    shipto=s(address_data.get("shipto") or shipto_name) # Use API's shipto or fallback
+                )
+                
+                db.session.add(new_shipping_info)
+                current_app.logger.info("Inserted shipping info for user %s and site %s", uid, full_account_name)
+
+            except requests.exceptions.RequestException as req_e:
+                # Log the API call error but continue processing other sites/profile sync
+                current_app.logger.error("API call failed for shipping info for user %s and site %s: %s",
+                                         uid, full_account_name, str(req_e))
+            except Exception as e:
+                # Log any other unexpected error during the loop
+                current_app.logger.error("Error processing shipping info for user %s and site %s: %s",
+                                         uid, full_account_name, str(e))
+        
         # -----------------------------
         # Sync user_sites table from profile.amazon_site
+        # (Rest of the original sync logic remains unchanged)
         # -----------------------------
-        # This ensures for each "Amazon CODE" in profile.amazon_site there is a user_sites row:
-        #   site_slug = CODE, label = "Amazon CODE", is_default = True for first item
-        # It updates existing rows or inserts new ones. It also clears previous defaults.
-        from sqlalchemy import text
-
+        from sqlalchemy import text # Retained for context, though likely imported at top
+        
         try:
             normalized_sites = getattr(profile, "amazon_site", []) or []
 
@@ -505,10 +559,10 @@ def setup_profile():
             current_app.logger.exception(
                 "Failed to sync user_sites for user %s; desired=%s existing_slugs=%s",
                 uid, desired_slugs, list(existing_by_slug.keys()) if 'existing_by_slug' in locals() else None
-            )    
+            )
 
         # -----------------------------
-        # commit final transaction
+        # commit final transaction (includes profile updates, user updates, shipping_information inserts, and user_sites sync)
         # -----------------------------
         db.session.commit()
 

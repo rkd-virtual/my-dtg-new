@@ -12,7 +12,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Spinner } from "@/components/ui/spinner";
-import { LoaderIcon,ChevronDown } from "lucide-react"; // Import the arrow icon
+import { Label } from "@/components/ui/label";
+import { LoaderIcon, ChevronDown, ChevronDownIcon } from "lucide-react"; // Import the arrow icon
 
 export default function Page() {
   const { sites, loading } = useAuth();
@@ -166,75 +167,78 @@ export default function Page() {
     <>
       <SiteHeader title="Dashboard" />
       <div className="p-4 lg:p-6">
-        {showSelect && (
-          <div className="mb-6 flex items-center gap-4">
-            {/* The white card container */}
-            <Card className="max-w-md shadow-sm">
-              <CardContent className="p-3 flex items-center">
-                <label
-                  htmlFor="account-select"
-                  className="text-sm font-medium mr-3 whitespace-nowrap text-gray-900"
-                >
-                  Select an Account
-                </label>
+        <Card className="w-fit shadow-sm p-0">
+                <CardContent className="p-3 flex items-center gap-4"> 
+                    {loading ? (
+                        <div className="flex items-center gap-2">
+                            <LoaderIcon className="h-4 w-4 animate-spin" />
+                            <span>Loading accounts...</span>
+                        </div>
+                    ) : showSelect ? (
+                        <div className="flex items-center gap-3"> 
+                            <Label className="text-sm font-medium whitespace-nowrap text-gray-900 mb-0">
+                                Select an Account
+                            </Label>
 
-                {/* Relative wrapper to hold both the select and the custom arrow icon */}
-                <div className="relative">
-                  <select
-                    id="account-select"
-                    value={selectValue}
-                    onChange={(e) => {
-                      setSelectedAccount(e.target.value);
-                    }}
-                    className="
-                      block
-                      w-full
-                      appearance-none
-                      rounded-md
-                      border
-                      border-gray-300
-                      bg-white
-                      pl-3
-                      pr-8
-                      py-1.5
-                      text-sm
-                      font-medium
-                      text-gray-900
-                      shadow-sm
-                      focus:border-indigo-500
-                      focus:outline-none
-                      focus:ring-1
-                      focus:ring-indigo-500
-                      cursor-pointer
-                    "
-                    style={{ minWidth: "140px" }}
-                  >
-                    <option value="all-accounts">All Accounts</option>
-                    {!loading && sites && sites.length > 0
-                      ? sites.map((s) => (
-                          <option key={s.id} value={s.site_slug}>
-                            {s.label}
-                          </option>
-                        ))
-                      : null}
-                  </select>
+                            <div className="relative flex items-center">
+                                <select
+                                    id="account-select"
+                                    value={selectValue}
+                                    onChange={(e) => setSelectedAccount(e.target.value)}
+                                    className="
+                                        block
+                                        appearance-none
+                                        rounded-md
+                                        border
+                                        border-gray-300
+                                        bg-white
+                                        pl-3
+                                        pr-8
+                                        py-1.5
+                                        text-sm
+                                        font-medium
+                                        text-gray-900
+                                        shadow-sm
+                                        focus:border-indigo-500
+                                        focus:outline-none
+                                        focus:ring-1
+                                        focus:ring-indigo-500
+                                        cursor-pointer
+                                    "
+                                    style={{ minWidth: "140px" }}
+                                >
+                                    <option value="all-accounts">All Accounts</option>
+                                    {!loading && sites && sites.length > 0
+                                        ? sites.map((s: any) => (
+                                            <option key={s.id} value={s.site_slug}>
+                                                {s.label}
+                                            </option>
+                                        ))
+                                        : null}
+                                </select>
+                                <ChevronDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                            </div>
 
-                  {/* Custom Arrow Icon - Absolute positioned */}
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
-                </div>
-              </CardContent>
+                            {loadingCounts && (
+                                <div className="flex items-center text-sm text-blue-600">
+                                <LoaderIcon className="h-5 w-5 animate-spin" />
+                                </div>
+                            )}
+                        </div>
+                    ) : sites && sites.length === 1 ? (
+                        <div className="flex items-center gap-4">
+                            <div className="text-sm">
+                                Account: <strong>{sites[0].label ?? sites[0].site_slug}</strong>
+                            </div>
+                            {loadingCounts && <LoaderIcon className="h-4 w-4 animate-spin" />}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-muted-foreground">No accounts available</div>
+                    )}
+                </CardContent>
             </Card>
 
-            {/* Loading spinner outside the card */}
-            {loadingCounts && (
-              <div className="flex items-center text-sm text-blue-600">
-                <LoaderIcon className="h-5 w-5 animate-spin" />
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 mt-[20px]">
           <Link
             href={buildOrdersLink("orders")}
             className="block focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-300 rounded-md"
