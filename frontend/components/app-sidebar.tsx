@@ -174,7 +174,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       await signOut();
     } catch (err) {
       console.error("signOut failed", err);
-    } finally {
+    } 
+
+    try {
+    // clear in-memory context immediately so UI updates
+    try {
+      clearQuote();
+    } catch (e) {
+      console.warn("clearQuote failed", e);
+    }
+
+    // remove generic draft
+    try {
+      localStorage.removeItem("quote-items");
+    } catch (e) {
+      console.warn("Failed to remove quote-items", e);
+    }
+    
+    try {
+      const uid = user?.id ? String(user.id) : null;
+      if (uid) localStorage.removeItem(`quote-items:${uid}`);
+    } catch (e) {
+      console.warn("Failed to remove per-user quote-items", e);
+    }
+  }
+    finally {
       setIsLoggingOut(false);
       setOpenProfile(false);
     }

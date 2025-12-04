@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { getApi, putApi } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { AlertCircle } from "lucide-react";
 
 export default function PasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -42,7 +43,8 @@ export default function PasswordForm() {
       new_password: newPassword,
     });
 
-    toast.success("Password updated successfully");
+    toast.success("Password updated successfully", 
+      {icon: <AlertCircle className="w-5 h-5 text-green-500" />,});
 
     setCurrentPassword("");
     setNewPassword("");

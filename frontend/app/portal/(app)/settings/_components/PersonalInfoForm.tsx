@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { LoaderIcon } from "lucide-react";
 import { getApi, putApi } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { AlertCircle } from "lucide-react";
 
 type PersonalData = {
   first_name: string;
@@ -115,7 +117,9 @@ export default function PersonalInfoForm() {
     try {
       await putApi("/settings", payload);
       // global toast (Sonner)
-      toast.success("Personal information updated.");
+      toast.success("Personal information updated.", {
+        icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+      });
     } catch (err: any) {
       const msg = err?.payload?.message || err?.message || "Failed to save settings";
       setServerError(msg);
@@ -137,7 +141,7 @@ export default function PersonalInfoForm() {
       .filter(Boolean);
   }
 
-  if (loading) return <div className="p-4">Loading personal information…</div>;
+  if (loading) return <div className="p-4"><LoaderIcon className="h-5 w-5 animate-spin" /></div>;
   if (!data) return <div className="p-4 text-red-600">No personal data available.</div>;
 
   return (

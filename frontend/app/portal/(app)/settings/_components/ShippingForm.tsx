@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { getApi, putApi } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { AlertCircle } from "lucide-react";
 
 type Site = {
   id: number;
@@ -150,8 +151,8 @@ export default function ShippingForm() {
   // actual ZIP validation using zippopotam.us or configured host
   async function validateZip(zip: string) {
     // basic quick checks
-    if (!zip || zip.trim().length < 3) {
-      setValidation((v) => ({ ...v, zip: "ZIP is too short" }));
+    if (!zip || zip.trim().length < 5) {
+      setValidation((v) => ({ ...v, zip: "ZIP must be at least 5 characters" }));
       setZipValid(false);
       return;
     }
@@ -261,7 +262,9 @@ export default function ShippingForm() {
       //toast.success?.("Address pre-filled from remote");
     } catch (err: any) {
       console.error("Remote fetch failed", err);
-      toast.error?.(err?.message || "Failed to fetch address for selected site");
+      toast.error?.(err?.message || "Failed to fetch address for selected site", {
+        icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+      });
       setError("Failed to pre-fill address");
     } finally {
       setRemoteLoading(false);
@@ -273,7 +276,14 @@ export default function ShippingForm() {
     if (!form.address1.trim()) v.address1 = "Address is required";
     if (!form.city.trim()) v.city = "City is required";
     if (!form.state.trim()) v.state = "State is required";
-    if (!form.zip.trim()) v.zip = "ZIP / Postal code is required";
+    // if (!form.zip.trim()) v.zip = "ZIP / Postal code is required";
+
+    if (!form.zip.trim()) {
+    v.zip = "ZIP / Postal code is required";
+    } else if (form.zip.trim().length < 5) {
+      v.zip = "ZIP must be at least 5 characters";
+    }
+
     if (!form.country.trim()) v.country = "Country is required";
     setValidation(v);
     return !v.address1 && !v.city && !v.zip && !v.country && !v.state;
@@ -290,7 +300,9 @@ export default function ShippingForm() {
     try {
       const payload = { ...form };
       await putApi("/settings/shipping", payload);
-      toast.success?.("Shipping information saved");
+      toast.success?.("Shipping information saved", {
+        icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+      });
     } catch (err: any) {
       console.error("Save failed", err);
       toast.error?.(err?.message || "Failed to save shipping info");

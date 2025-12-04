@@ -23,7 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-import { Star, StarOff } from "lucide-react";
+import { AlertCircle, LoaderIcon, Star, StarOff } from "lucide-react";
 import { toast } from "sonner";
 
 type Site = {
@@ -393,11 +393,15 @@ export default function SitesList() {
         const withoutTemp = (prev || []).filter((p) => p.id > 0);
         return [...created, ...withoutTemp];
       });
-      toast.success("Added successfully.");
+      toast.success("Added successfully.", {
+        icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+      });
     } catch (e: any) {
       console.error("Failed to create sites", e);
       setSites((prev) => (prev ? prev.filter((s) => s.id > 0) : []));
-      toast.error("Failed to save sites.");
+      toast.error("Failed to save sites.", {
+        icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+      });
     }
   };
 
@@ -442,17 +446,23 @@ export default function SitesList() {
         })
       );
 
-      toast.success("Successfully changed the default site");
+      toast.success("Successfully changed the default site", {
+      icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+      });
     } catch (e: any) {
       console.error("Failed to set default", e);
       setSites(prev);
-      toast.error("Failed to change default site.");
+      toast.error("Failed to change default site.", {
+      icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+      });
     }
   };
 
   const confirmDelete = (s: Site) => {
     if (s.is_default) {
-      toast.error("Cannot delete the default site. First make another site the default.");
+      toast.error("Cannot delete the default site. First make another site the default.", {
+              icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+            });
       return;
     }
     setToDelete(s);
@@ -473,11 +483,15 @@ export default function SitesList() {
         const txt = await res.text().catch(() => res.statusText);
         throw new Error(txt || res.statusText);
       }
-      toast.success("Successfully Deleted.");
+      toast.success("Successfully Deleted.", {
+      icon: <AlertCircle className="w-5 h-5 text-green-500" />,
+      });
     } catch (e: any) {
       console.error("Delete failed", e);
       setSites(prev);
-      toast.error("Failed to delete site.");
+      toast.error("Failed to delete site.", {
+      icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+      });
     }
   };
 
